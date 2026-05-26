@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '*/5 * * * *'   # প্রতি ৫ মিনিটে চলবে
   workflow_dispatch:          # হাতে চালানোর অপশন
+# active repo - schedule enabled
 
 permissions:
   contents: write
@@ -42,4 +43,3 @@ jobs:
           git add last_results.json || true
           git diff --staged --quiet || git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push || true
-          
