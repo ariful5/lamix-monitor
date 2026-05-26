@@ -17,18 +17,100 @@ HEADERS = {
     'Referer': 'https://lamix.org/tools',
 }
 
-IGNORE_WORDS = {
-    'Search', 'Results', 'Cli', 'Tools', 'Toggle', 'Mode', 'Submit',
-    'Loading', 'Please', 'Wait', 'Show', 'Hide', 'More', 'Less',
-    'Next', 'Prev', 'Search Results', 'Cli Search', 'Country', 'Countries',
-    'Message', 'Body', 'Minute', 'Access', 'Last', 'Find',
+# UI শব্দ যেগুলো দেশ না — exact match (lowercase)
+IGNORE_EXACT = {
+    'search', 'results', 'search results', 'cli', 'cli search',
+    'tools', 'toggle', 'mode', 'submit', 'loading', 'please', 'wait',
+    'show', 'hide', 'more', 'less', 'next', 'prev',
+    'country', 'countries', 'message', 'body', 'minute',
+    'access', 'last', 'find', 'result', 'keyword',
+    'lamix', 'sms', 'tool', 'in', 'the', 'from', 'out',
+    'search in message body', 'find out access from a specific cli in the last 30 minute',
+    'lamix cli search tool',
 }
+
+# দেশের নাম — operator সহ entry গ্রহণযোগ্য (যেমন "Malaysia - Celcom")
+VALID_COUNTRIES = {
+    "Afghanistan","Albania","Algeria","Andorra","Angola","Argentina","Armenia",
+    "Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Belarus",
+    "Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia","Botswana","Brazil",
+    "Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon","Canada",
+    "Chad","Chile","China","Colombia","Comoros","Congo","Croatia","Cuba",
+    "Cyprus","Czech Republic","Denmark","Djibouti","Dominican Republic","Ecuador",
+    "Egypt","El Salvador","Eritrea","Estonia","Ethiopia","Fiji","Finland","France",
+    "Gabon","Gambia","Georgia","Germany","Ghana","Greece","Guatemala","Guinea",
+    "Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran",
+    "Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan",
+    "Kenya","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia",
+    "Libya","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia","Maldives",
+    "Mali","Malta","Mauritania","Mauritius","Mexico","Moldova","Mongolia",
+    "Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nepal","Netherlands",
+    "Nicaragua","Niger","Nigeria","Norway","Oman","Pakistan","Palestine","Panama",
+    "Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Romania","Russia",
+    "Rwanda","Saudi Arabia","Senegal","Serbia","Sierra Leone","Singapore",
+    "Slovakia","Slovenia","Somalia","South Africa","South Sudan","Spain",
+    "Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan",
+    "Tajikistan","Tanzania","Thailand","Togo","Trinidad and Tobago","Tunisia",
+    "Turkey","Turkmenistan","Uganda","Ukraine","United Arab Emirates",
+    "United Kingdom","United States","Uruguay","Uzbekistan","Venezuela",
+    "Vietnam","Yemen","Zambia","Zimbabwe","Ivory Coast","North Korea",
+    "South Korea","New Zealand","Papua New Guinea","North Macedonia",
+    "East Timor","Kosovo","UAE","USA","UK","Cabo Verde","Central African Republic",
+    "Democratic Republic of Congo","Equatorial Guinea","Burkina",
+}
+
+VALID_COUNTRIES_LOWER = {c.lower(): c for c in VALID_COUNTRIES}
+
+
+def clean_text(txt):
+    """ইমোজি ও অপ্রয়োজনীয় চিহ্ন সরিয়ে text পরিষ্কার করো।"""
+    # ইমোজি সরাও
+    txt = re.sub(r'[\U0001F000-\U0001FFFF]', '', txt)
+    # একাধিক space কমাও
+    txt = re.sub(r'\s+', ' ', txt)
+    return txt.strip()
+
+
+def is_result_entry(txt):
+    """
+    একটা text Lamix result entry কিনা যাচাই করো।
+    দেশ বা "দেশ - Operator" format হলে True।
+    """
+    if not txt or len(txt) < 3 or len(txt) > 80:
+        return False
+
+    # IGNORE তালিকায় থাকলে বাদ
+    if txt.lower() in IGNORE_EXACT:
+        return False
+
+    # "Country - Operator" format check
+    # যেমন: "Malaysia - Celcom", "Malaysia - Maxis", "Tanzania"
+    parts = re.split(r'\s*[-–]\s*', txt, maxsplit=1)
+    country_part = parts[0].strip()
+
+    # দেশের নাম VALID_COUNTRIES এ আছে কিনা
+    if country_part.lower() in VALID_COUNTRIES_LOWER:
+        return True
+
+    return False
+
+
+def get_canonical(txt):
+    """দেশ বা 'দেশ - Operator' এর canonical form ফেরত দাও।"""
+    parts = re.split(r'\s*[-–]\s*', txt, maxsplit=1)
+    country_part = parts[0].strip()
+    canonical_country = VALID_COUNTRIES_LOWER.get(country_part.lower(), country_part)
+
+    if len(parts) > 1:
+        operator = parts[1].strip()
+        return f"{canonical_country} - {operator}"
+    return canonical_country
+
 
 def search(keyword):
     session = requests.Session()
     session.headers.update(HEADERS)
 
-    # Step 1: GET the page to grab CSRF token
     resp = session.get('https://lamix.org/tools', timeout=30)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, 'html.parser')
@@ -36,7 +118,6 @@ def search(keyword):
     token_el = soup.find('input', {'name': '_token'})
     token = token_el['value'] if token_el else ''
 
-    # Step 2: POST with search term
     data = {
         '_token': token,
         'search_term': keyword.strip(),
@@ -51,50 +132,54 @@ def search(keyword):
     return resp.text
 
 
-def parse_countries(html):
+def parse_results(html):
     """
-    Extract country names from Lamix search results.
-    Tries multiple strategies so nothing is missed.
+    HTML থেকে সব result entry বের করো।
+    দেশ এবং 'দেশ - Operator' উভয়ই গ্রহণ করে।
     """
     soup = BeautifulSoup(html, 'html.parser')
-    countries = set()
+    results = []
+    seen = set()
 
-    # --- Strategy 1: Look for <li> tags (most likely result containers) ---
+    # Strategy 1: <li> ট্যাগ — স্ক্রিনশট দেখে নিশ্চিত এখানেই data আছে
     for li in soup.find_all('li'):
-        txt = li.get_text(strip=True)
-        # Strip emoji flags & fire emoji from text
-        txt_clean = re.sub(r'[\U0001F300-\U0001FFFF]', '', txt).strip()
-        if 2 < len(txt_clean) < 60 and txt_clean not in IGNORE_WORDS:
-            if re.match(r'^[A-Z][a-z]+([ \-][A-Z][a-z]+)*$', txt_clean):
-                countries.add(txt_clean)
+        txt = clean_text(li.get_text(separator=' ', strip=True))
+        if txt and txt.lower() not in seen:
+            if is_result_entry(txt):
+                canonical = get_canonical(txt)
+                if canonical.lower() not in seen:
+                    results.append(canonical)
+                    seen.add(canonical.lower())
 
-    # --- Strategy 2: Any element with class containing 'country', 'result', 'item' ---
-    for el in soup.find_all(True, class_=re.compile(r'country|result|item|cli', re.I)):
-        txt = el.get_text(strip=True)
-        txt_clean = re.sub(r'[\U0001F300-\U0001FFFF]', '', txt).strip()
-        if 2 < len(txt_clean) < 60 and txt_clean not in IGNORE_WORDS:
-            if re.match(r'^[A-Z][a-z]+([ \-][A-Z][a-z]+)*$', txt_clean):
-                countries.add(txt_clean)
+    # Strategy 2: class-based
+    if not results:
+        for el in soup.find_all(True, class_=re.compile(r'country|result|item|cli|row|card|entry', re.I)):
+            # শুধু leaf node (ভেতরে আর tag নেই)
+            if not el.find():
+                txt = clean_text(el.get_text(strip=True))
+                if txt and txt.lower() not in seen:
+                    if is_result_entry(txt):
+                        canonical = get_canonical(txt)
+                        if canonical.lower() not in seen:
+                            results.append(canonical)
+                            seen.add(canonical.lower())
 
-    # --- Strategy 3: Generic fallback — td, span, div, p ---
-    if not countries:
-        for el in soup.find_all(['td', 'span', 'div', 'p']):
-            txt = el.get_text(strip=True)
-            txt_clean = re.sub(r'[\U0001F300-\U0001FFFF]', '', txt).strip()
-            if 2 < len(txt_clean) < 50 and txt_clean not in IGNORE_WORDS:
-                if re.match(r'^[A-Z][a-z]+([ \-][A-Z][a-z]+)*$', txt_clean):
-                    countries.add(txt_clean)
+    # Strategy 3: সব text node থেকে fallback
+    if not results:
+        for el in soup.find_all(['td', 'span', 'p']):
+            if not el.find():
+                txt = clean_text(el.get_text(strip=True))
+                if txt and txt.lower() not in seen:
+                    if is_result_entry(txt):
+                        canonical = get_canonical(txt)
+                        if canonical.lower() not in seen:
+                            results.append(canonical)
+                            seen.add(canonical.lower())
 
-    # --- Strategy 4: Unicode flag emoji pairs (bonus info) ---
-    full_text = soup.get_text()
-    flags = re.findall(r'[\U0001F1E0-\U0001F1FF]{2}', full_text)
-    # (flags are kept separate, not mixed into country names)
-
-    return countries, flags
+    return results
 
 
 def send_telegram(message):
-    """Send a message to Telegram. Returns True on success."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("   ⚠️  TELEGRAM_TOKEN বা TELEGRAM_CHAT_ID সেট নেই!")
         return False
@@ -122,7 +207,6 @@ def main():
     now = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
     print(f"🔍 Monitor শুরু: {now}")
     print(f"   Keywords: {KEYWORDS}")
-    print(f"   Search in body: {SEARCH_IN_BODY}")
     print(f"   Telegram configured: {bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)}")
 
     for keyword in KEYWORDS:
@@ -136,7 +220,6 @@ def main():
             html = search(keyword)
             print(f"   HTML length: {len(html)} chars")
 
-            # reCAPTCHA check (relaxed — only block if truly tiny)
             if 'recaptcha' in html.lower() and len(html) < 2000:
                 msg = (
                     f"⚠️ <b>reCAPTCHA Block!</b>\n\n"
@@ -148,30 +231,25 @@ def main():
                 send_telegram(msg)
                 continue
 
-            countries, flags = parse_countries(html)
-            print(f"   দেশ পাওয়া: {countries}")
-            print(f"   Flag emoji: {flags}")
+            results = parse_results(html)
+            print(f"   ✅ Results: {results}")
 
-            if countries:
-                country_list = '\n'.join(f"• {c}" for c in sorted(countries))
-                flag_str = ' '.join(flags) if flags else ''
+            if results:
+                result_list = '\n'.join(f"• {r}" for r in results)
                 msg = (
-                    f"🔍 <b>Lamix CLI Search Result</b>\n\n"
+                    f"🚨 <b>Lamix CLI Search Result</b>\n\n"
                     f"🔑 Keyword: <code>{keyword}</code>\n"
-                    f"📊 মোট দেশ: <b>{len(countries)}টি</b>\n\n"
-                    f"🌍 দেশসমূহ:\n{country_list}\n"
-                    + (f"\n🏳️ Flags: {flag_str}\n" if flag_str else '')
-                    + f"\n🕐 সময়: {now}\n"
+                    f"📊 মোট: <b>{len(results)}টি</b>\n\n"
+                    f"🌍 দেশ / Operator:\n{result_list}\n\n"
+                    f"🕐 সময়: {now}\n"
                     f"🔗 <a href='https://lamix.org/tools'>Lamix দেখুন</a>"
                 )
             else:
-                # Debug: save a snippet of HTML to understand why parsing failed
-                snippet = html[:500].replace('<', '&lt;').replace('>', '&gt;')
                 msg = (
-                    f"🔍 <b>Lamix CLI Search Result</b>\n\n"
+                    f"🔍 <b>Lamix Search</b>\n\n"
                     f"🔑 Keyword: <code>{keyword}</code>\n"
-                    f"❌ কোনো দেশ পাওয়া যায়নি\n"
-                    f"📄 HTML size: {len(html)} chars\n"
+                    f"❌ কোনো result পাওয়া যায়নি\n"
+                    f"📄 HTML: {len(html)} chars\n"
                     f"🕐 সময়: {now}\n\n"
                     f"🔗 <a href='https://lamix.org/tools'>Manually দেখুন</a>"
                 )
@@ -179,9 +257,9 @@ def main():
             send_telegram(msg)
 
         except requests.HTTPError as e:
-            err_msg = f"HTTP Error {e.response.status_code}"
-            print(f"   ❌ {err_msg}")
-            send_telegram(f"⚠️ <b>HTTP Error</b>\nKeyword: <code>{keyword}</code>\n{err_msg}")
+            err = f"HTTP {e.response.status_code}"
+            print(f"   ❌ {err}")
+            send_telegram(f"⚠️ <b>HTTP Error</b>\nKeyword: <code>{keyword}</code>\n{err}")
 
         except Exception as e:
             print(f"   ❌ Error: {e}")
