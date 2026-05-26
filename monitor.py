@@ -61,6 +61,62 @@ VALID_COUNTRIES = {
 
 VALID_COUNTRIES_LOWER = {c.lower(): c for c in VALID_COUNTRIES}
 
+COUNTRY_FLAGS = {
+    "Afghanistan": "🇦🇫", "Albania": "🇦🇱", "Algeria": "🇩🇿", "Andorra": "🇦🇩",
+    "Angola": "🇦🇴", "Argentina": "🇦🇷", "Armenia": "🇦🇲", "Australia": "🇦🇺",
+    "Austria": "🇦🇹", "Azerbaijan": "🇦🇿", "Bahamas": "🇧🇸", "Bahrain": "🇧🇭",
+    "Bangladesh": "🇧🇩", "Belarus": "🇧🇾", "Belgium": "🇧🇪", "Belize": "🇧🇿",
+    "Benin": "🇧🇯", "Bhutan": "🇧🇹", "Bolivia": "🇧🇴", "Bosnia": "🇧🇦",
+    "Botswana": "🇧🇼", "Brazil": "🇧🇷", "Brunei": "🇧🇳", "Bulgaria": "🇧🇬",
+    "Burkina Faso": "🇧🇫", "Burundi": "🇧🇮", "Cambodia": "🇰🇭", "Cameroon": "🇨🇲",
+    "Canada": "🇨🇦", "Chad": "🇹🇩", "Chile": "🇨🇱", "China": "🇨🇳",
+    "Colombia": "🇨🇴", "Comoros": "🇰🇲", "Congo": "🇨🇬", "Croatia": "🇭🇷",
+    "Cuba": "🇨🇺", "Cyprus": "🇨🇾", "Czech Republic": "🇨🇿", "Denmark": "🇩🇰",
+    "Djibouti": "🇩🇯", "Dominican Republic": "🇩🇴", "Ecuador": "🇪🇨",
+    "Egypt": "🇪🇬", "El Salvador": "🇸🇻", "Eritrea": "🇪🇷", "Estonia": "🇪🇪",
+    "Ethiopia": "🇪🇹", "Fiji": "🇫🇯", "Finland": "🇫🇮", "France": "🇫🇷",
+    "Gabon": "🇬🇦", "Gambia": "🇬🇲", "Georgia": "🇬🇪", "Germany": "🇩🇪",
+    "Ghana": "🇬🇭", "Greece": "🇬🇷", "Guatemala": "🇬🇹", "Guinea": "🇬🇳",
+    "Guyana": "🇬🇾", "Haiti": "🇭🇹", "Honduras": "🇭🇳", "Hungary": "🇭🇺",
+    "Iceland": "🇮🇸", "India": "🇮🇳", "Indonesia": "🇮🇩", "Iran": "🇮🇷",
+    "Iraq": "🇮🇶", "Ireland": "🇮🇪", "Israel": "🇮🇱", "Italy": "🇮🇹",
+    "Jamaica": "🇯🇲", "Japan": "🇯🇵", "Jordan": "🇯🇴", "Kazakhstan": "🇰🇿",
+    "Kenya": "🇰🇪", "Kuwait": "🇰🇼", "Kyrgyzstan": "🇰🇬", "Laos": "🇱🇦",
+    "Latvia": "🇱🇻", "Lebanon": "🇱🇧", "Lesotho": "🇱🇸", "Liberia": "🇱🇷",
+    "Libya": "🇱🇾", "Lithuania": "🇱🇹", "Luxembourg": "🇱🇺", "Madagascar": "🇲🇬",
+    "Malawi": "🇲🇼", "Malaysia": "🇲🇾", "Maldives": "🇲🇻", "Mali": "🇲🇱",
+    "Malta": "🇲🇹", "Mauritania": "🇲🇷", "Mauritius": "🇲🇺", "Mexico": "🇲🇽",
+    "Moldova": "🇲🇩", "Mongolia": "🇲🇳", "Montenegro": "🇲🇪", "Morocco": "🇲🇦",
+    "Mozambique": "🇲🇿", "Myanmar": "🇲🇲", "Namibia": "🇳🇦", "Nepal": "🇳🇵",
+    "Netherlands": "🇳🇱", "Nicaragua": "🇳🇮", "Niger": "🇳🇪", "Nigeria": "🇳🇬",
+    "Norway": "🇳🇴", "Oman": "🇴🇲", "Pakistan": "🇵🇰", "Palestine": "🇵🇸",
+    "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Peru": "🇵🇪", "Philippines": "🇵🇭",
+    "Poland": "🇵🇱", "Portugal": "🇵🇹", "Qatar": "🇶🇦", "Romania": "🇷🇴",
+    "Russia": "🇷🇺", "Rwanda": "🇷🇼", "Saudi Arabia": "🇸🇦", "Senegal": "🇸🇳",
+    "Serbia": "🇷🇸", "Sierra Leone": "🇸🇱", "Singapore": "🇸🇬", "Slovakia": "🇸🇰",
+    "Slovenia": "🇸🇮", "Somalia": "🇸🇴", "South Africa": "🇿🇦", "South Sudan": "🇸🇸",
+    "Spain": "🇪🇸", "Sri Lanka": "🇱🇰", "Sudan": "🇸🇩", "Suriname": "🇸🇷",
+    "Sweden": "🇸🇪", "Switzerland": "🇨🇭", "Syria": "🇸🇾", "Taiwan": "🇹🇼",
+    "Tajikistan": "🇹🇯", "Tanzania": "🇹🇿", "Thailand": "🇹🇭", "Togo": "🇹🇬",
+    "Trinidad and Tobago": "🇹🇹", "Tunisia": "🇹🇳", "Turkey": "🇹🇷",
+    "Turkmenistan": "🇹🇲", "Uganda": "🇺🇬", "Ukraine": "🇺🇦",
+    "United Arab Emirates": "🇦🇪", "UAE": "🇦🇪", "United Kingdom": "🇬🇧",
+    "UK": "🇬🇧", "United States": "🇺🇸", "USA": "🇺🇸", "Uruguay": "🇺🇾",
+    "Uzbekistan": "🇺🇿", "Venezuela": "🇻🇪", "Vietnam": "🇻🇳", "Yemen": "🇾🇪",
+    "Zambia": "🇿🇲", "Zimbabwe": "🇿🇼", "Ivory Coast": "🇨🇮", "North Korea": "🇰🇵",
+    "South Korea": "🇰🇷", "New Zealand": "🇳🇿", "Papua New Guinea": "🇵🇬",
+    "North Macedonia": "🇲🇰", "East Timor": "🇹🇱", "Kosovo": "🇽🇰",
+    "Cabo Verde": "🇨🇻", "Central African Republic": "🇨🇫",
+    "Democratic Republic of Congo": "🇨🇩", "Equatorial Guinea": "🇬🇶",
+    "Burkina": "🇧🇫", "Burkina Faso": "🇧🇫",
+}
+
+
+def get_flag(entry):
+    parts = re.split(r'\s*[-–]\s*', entry, maxsplit=1)
+    country = parts[0].strip()
+    return COUNTRY_FLAGS.get(country, "🌍")
+
 
 def load_last_results():
     try:
@@ -163,18 +219,21 @@ def parse_results(html):
     return results
 
 
-def send_telegram(message):
+def send_telegram(message, reply_markup=None):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("   ⚠️  TELEGRAM_TOKEN বা TELEGRAM_CHAT_ID সেট নেই!")
         return False
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': TELEGRAM_CHAT_ID,
+        'text': message,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True,
+    }
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
     try:
-        resp = requests.post(url, json={
-            'chat_id': TELEGRAM_CHAT_ID,
-            'text': message,
-            'parse_mode': 'HTML',
-            'disable_web_page_preview': True,
-        }, timeout=15)
+        resp = requests.post(url, json=payload, timeout=15)
         if resp.status_code == 200:
             print("   ✅ Telegram পাঠানো সফল!")
             return True
@@ -187,8 +246,11 @@ def send_telegram(message):
 
 
 def main():
-    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
-    print(f"🔍 Monitor শুরু: {now}")
+    now = datetime.utcnow()
+    time_str = now.strftime('%H:%M UTC')
+    date_str = now.strftime('%d.%m.%y')
+
+    print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"   Keywords: {KEYWORDS}")
 
     last_results = load_last_results()
@@ -210,8 +272,7 @@ def main():
                 send_telegram(
                     f"⚠️ <b>reCAPTCHA Block!</b>\n\n"
                     f"🔑 Keyword: <code>{keyword}</code>\n"
-                    f"🕐 সময়: {now}\n\n"
-                    f"Manually check: <a href='https://lamix.org/tools'>lamix.org/tools</a>"
+                    f"🕐 {time_str} | {date_str}"
                 )
                 continue
 
@@ -220,37 +281,34 @@ def main():
 
             new_results_all[keyword] = current
 
-            # আগের সাথে compare — operator সহ
             previous = set(last_results.get(keyword, []))
             current_set = set(current)
-
-            new_entries = sorted(current_set - previous)
-            removed_entries = sorted(previous - current_set)
+            new_entries = current_set - previous
+            removed_entries = previous - current_set
 
             if new_entries or removed_entries:
-                # পরিবর্তন হয়েছে
-                msg = f"🔔 <b>Lamix Update</b>\n\n"
-                msg += f"🔑 Keyword: <code>{keyword}</code>\n\n"
+                # numbered list with flag
+                country_lines = ''
+                for i, r in enumerate(current, 1):
+                    flag = get_flag(r)
+                    country_lines += f"{i}. {r} {flag}\n"
 
-                if new_entries:
-                    new_list = '\n'.join(f"• {r}" for r in new_entries)
-                    msg += f"🆕 নতুন:\n{new_list}\n\n"
+                msg = (
+                    f"🌐💥 LIVE ALERT 💥🌐\n\n"
+                    f"🎯 Website » <b>{keyword}</b>\n"
+                    f"📍 Countries » <b>{len(current)}</b>\n\n"
+                    f"{country_lines}\n"
+                    f"⏰ {time_str} | {date_str}"
+                )
 
-                if removed_entries:
-                    removed_list = '\n'.join(f"• {r}" for r in removed_entries)
-                    msg += f"❌ বাদ গেছে:\n{removed_list}\n\n"
+                # বাটন — Developer এ চাপ দিলে @Napa_Ex এ যাবে
+                reply_markup = {
+                    "inline_keyboard": [[
+                        {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
+                    ]]
+                }
 
-                # সব active দেশ operator সহ
-                if current:
-                    all_list = '\n'.join(f"• {r}" for r in current)
-                    msg += f"🌍 এখন active ({len(current)}টি):\n{all_list}\n\n"
-                else:
-                    msg += f"🌍 এখন কোনো result নেই\n\n"
-
-                msg += f"🕐 সময়: {now}\n"
-                msg += f"🔗 <a href='https://lamix.org/tools'>Lamix দেখুন</a>"
-
-                send_telegram(msg)
+                send_telegram(msg, reply_markup)
 
             else:
                 print(f"   ℹ️  কোনো পরিবর্তন নেই।")
