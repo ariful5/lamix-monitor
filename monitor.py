@@ -308,7 +308,25 @@ def main():
         except requests.HTTPError as e:
             err = f"HTTP {e.response.status_code}"
             print(f"   ❌ {err}")
-            send_telegram(f"⚠️ <b>HTTP Error</b>\nKeyword: <code>{keyword}</code>\n{err}")
+            send_telegram(
+                f"🔴 Network Error\n\n"
+                f"🎯 {keyword}\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"সার্ভারে কানেক্ট হতে পারেনি\n"
+                f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
+                f"⏰ {time_str} | {date_str}"
+            )
+
+        except Exception as e:
+            print(f"   ❌ Error: {e}")
+            send_telegram(
+                f"🔴 Network Error\n\n"
+                f"🎯 {keyword}\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"সার্ভারে কানেক্ট হতে পারেনি\n"
+                f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
+                f"⏰ {time_str} | {date_str}"
+            )
 
         except Exception as e:
             print(f"   ❌ Error: {e}")
