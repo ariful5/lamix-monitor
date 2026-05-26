@@ -1,13 +1,11 @@
 {
     "Facebook": [
         "Palestine",
+        "Yemen",
         "Algeria",
-        "Ethiopia",
         "Ghana",
         "Malaysia - Celcom",
-        "Sudan",
-        "Tanzania",
-        "Yemen"
+        "Mauritania"
     ],
     "Douyin": [
         "Malaysia - Celcom",
@@ -16,6 +14,7 @@
     ],
     "Temu": [
         "Algeria",
+        "Malaysia - DiGi",
         "Sri Lanka"
     ]
 }
