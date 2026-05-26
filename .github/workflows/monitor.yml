@@ -1,0 +1,45 @@
+name: Lamix Country Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # প্রতি ৫ মিনিটে চলবে
+  workflow_dispatch:          # হাতে চালানোর অপশন
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run monitor
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SEARCH_KEYWORDS:  ${{ secrets.SEARCH_KEYWORDS }}
+          SEARCH_IN_BODY:   'true'
+        run: python monitor.py
+
+      - name: Save results to repo
+        run: |
+          git config user.name  "Lamix Bot"
+          git config user.email "bot@lamix-monitor"
+          git add last_results.json || true
+          git diff --staged --quiet || git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push || true
+          
