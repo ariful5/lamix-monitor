@@ -253,7 +253,6 @@ def main():
     print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"   Keywords: {KEYWORDS}")
 
-    last_results = load_last_results()
     new_results_all = {}
 
     for keyword in KEYWORDS:
@@ -281,13 +280,7 @@ def main():
 
             new_results_all[keyword] = current
 
-            previous = set(last_results.get(keyword, []))
-            current_set = set(current)
-            new_entries = current_set - previous
-            removed_entries = previous - current_set
-
-            if new_entries or removed_entries:
-                # numbered list with flag
+            if current:
                 country_lines = ''
                 for i, r in enumerate(current, 1):
                     flag = get_flag(r)
@@ -301,7 +294,6 @@ def main():
                     f"⏰ {time_str} | {date_str}"
                 )
 
-                # বাটন — Developer এ চাপ দিলে @Napa_Ex এ যাবে
                 reply_markup = {
                     "inline_keyboard": [[
                         {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
@@ -311,7 +303,7 @@ def main():
                 send_telegram(msg, reply_markup)
 
             else:
-                print(f"   ℹ️  কোনো পরিবর্তন নেই।")
+                print(f"   ℹ️  কোনো result নেই।")
 
         except requests.HTTPError as e:
             err = f"HTTP {e.response.status_code}"
