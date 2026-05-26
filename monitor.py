@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 TELEGRAM_TOKEN   = os.environ.get('TELEGRAM_TOKEN', '')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
+TELEGRAM_CHAT_IDS = os.environ.get('TELEGRAM_CHAT_ID', '').split(',')
 KEYWORDS         = os.environ.get('SEARCH_KEYWORDS', 'test').split(',')
 SEARCH_IN_BODY   = os.environ.get('SEARCH_IN_BODY', 'true').lower() == 'true'
 RESULTS_FILE     = 'last_results.json'
@@ -220,12 +220,16 @@ def parse_results(html):
 
 
 def send_telegram(message, reply_markup=None):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
         print("   ⚠️  TELEGRAM_TOKEN বা TELEGRAM_CHAT_ID সেট নেই!")
         return False
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    for chat_id in TELEGRAM_CHAT_IDS:
+        chat_id = chat_id.strip()
+        if not chat_id:
+            continue
     payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
+        'chat_id': chat_id,
         'text': message,
         'parse_mode': 'HTML',
         'disable_web_page_preview': True,
