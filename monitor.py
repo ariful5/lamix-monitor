@@ -3,13 +3,13 @@ from bs4 import BeautifulSoup
 import os
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
-TELEGRAM_TOKEN   = os.environ.get('TELEGRAM_TOKEN', '')
+TELEGRAM_TOKEN    = os.environ.get('TELEGRAM_TOKEN', '')
 TELEGRAM_CHAT_IDS = os.environ.get('TELEGRAM_CHAT_ID', '').split(',')
-KEYWORDS         = os.environ.get('SEARCH_KEYWORDS', 'test').split(',')
-SEARCH_IN_BODY   = os.environ.get('SEARCH_IN_BODY', 'true').lower() == 'true'
-RESULTS_FILE     = 'last_results.json'
+KEYWORDS          = os.environ.get('SEARCH_KEYWORDS', 'test').split(',')
+SEARCH_IN_BODY    = os.environ.get('SEARCH_IN_BODY', 'false').lower() == 'true'
+RESULTS_FILE      = 'last_results.json'
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -220,7 +220,6 @@ def parse_results(html):
 
 
 def send_telegram(message, reply_markup=None):
-def send_telegram(message, reply_markup=None):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
         print("   ⚠️  TELEGRAM_TOKEN বা TELEGRAM_CHAT_ID সেট নেই!")
         return False
@@ -249,13 +248,12 @@ def send_telegram(message, reply_markup=None):
 
 
 def main():
-    from datetime import timezone, timedelta
     bd_tz = timezone(timedelta(hours=6))
     now = datetime.now(bd_tz)
     time_str = now.strftime('%H:%M')
     date_str = now.strftime('%d.%m.%y')
 
-    print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M')}")
     print(f"   Keywords: {KEYWORDS}")
 
     new_results_all = {}
@@ -311,8 +309,7 @@ def main():
                 print(f"   ℹ️  কোনো result নেই।")
 
         except requests.HTTPError as e:
-            err = f"HTTP {e.response.status_code}"
-            print(f"   ❌ {err}")
+            print(f"   ❌ HTTP Error: {e}")
             send_telegram(
                 f"🔴 Network Error\n\n"
                 f"🎯 {keyword}\n"
@@ -331,14 +328,6 @@ def main():
                 f"সার্ভারে কানেক্ট হতে পারেনি\n"
                 f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
                 f"⏰ {time_str} | {date_str}"
-            )
-
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
-            send_telegram(
-                f"⚠️ <b>Error</b>\n"
-                f"Keyword: <code>{keyword}</code>\n"
-                f"{str(e)[:300]}"
             )
 
     save_results(new_results_all)
