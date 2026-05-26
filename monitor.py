@@ -220,6 +220,7 @@ def parse_results(html):
 
 
 def send_telegram(message, reply_markup=None):
+def send_telegram(message, reply_markup=None):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
         print("   ⚠️  TELEGRAM_TOKEN বা TELEGRAM_CHAT_ID সেট নেই!")
         return False
@@ -228,25 +229,23 @@ def send_telegram(message, reply_markup=None):
         chat_id = chat_id.strip()
         if not chat_id:
             continue
-    payload = {
-        'chat_id': chat_id,
-        'text': message,
-        'parse_mode': 'HTML',
-        'disable_web_page_preview': True,
-    }
-    if reply_markup:
-        payload['reply_markup'] = reply_markup
-    try:
-        resp = requests.post(url, json=payload, timeout=15)
-        if resp.status_code == 200:
-            print("   ✅ Telegram পাঠানো সফল!")
-            return True
-        else:
-            print(f"   ❌ Telegram error: {resp.status_code} — {resp.text[:200]}")
-            return False
-    except Exception as e:
-        print(f"   ❌ Telegram exception: {e}")
-        return False
+        payload = {
+            'chat_id': chat_id,
+            'text': message,
+            'parse_mode': 'HTML',
+            'disable_web_page_preview': True,
+        }
+        if reply_markup:
+            payload['reply_markup'] = reply_markup
+        try:
+            resp = requests.post(url, json=payload, timeout=15)
+            if resp.status_code == 200:
+                print(f"   ✅ Telegram {chat_id} পাঠানো সফল!")
+            else:
+                print(f"   ❌ Telegram error {chat_id}: {resp.status_code}")
+        except Exception as e:
+            print(f"   ❌ Telegram exception {chat_id}: {e}")
+    return True
 
 
 def main():
