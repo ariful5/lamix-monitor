@@ -1,21 +1,21 @@
 {
     "Facebook": [
-        "Palestine",
-        "Yemen",
-        "Algeria",
         "Ethiopia",
+        "Algeria",
         "Ghana",
         "Israel",
-        "Mauritania"
+        "Mauritania",
+        "Palestine",
+        "Yemen"
     ],
     "Douyin": [
         "Malaysia - Celcom",
-        "Malaysia - DiGi",
-        "Malaysia - Maxis"
+        "Malaysia - DiGi"
     ],
     "Temu": [
         "Algeria",
         "Malaysia - DiGi",
+        "Malaysia - Maxis",
         "Sri Lanka"
     ]
 }
