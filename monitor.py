@@ -246,8 +246,10 @@ def send_telegram(message, reply_markup=None):
 
 
 def main():
-    now = datetime.utcnow()
-    time_str = now.strftime('%H:%M UTC')
+    from datetime import timezone, timedelta
+    bd_tz = timezone(timedelta(hours=6))
+    now = datetime.now(bd_tz)
+    time_str = now.strftime('%H:%M')
     date_str = now.strftime('%d.%m.%y')
 
     print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M UTC')}")
