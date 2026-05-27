@@ -287,15 +287,16 @@ def build_alert_message(name, keyword, results, time_str, date_str,
 
     search_label = "🔎 Body Search" if is_body_search else "🌐 CLI Search"
 
-    msg = (
-        f"{'👤 <b>' + name + '</b>\n\n' if prefix else ''}"
-        f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
-        f"{search_label}\n"
-        f"🎯 Keyword » <b>{keyword}</b>\n"
-        f"📍 Countries » <b>{len(results)}</b>\n\n"
-        f"{country_lines}\n"
-        f"⏰ {time_str} | {date_str}"
-    )
+    prefix_line = f"👤 <b>{name}</b>\n\n" if prefix else ""
+msg = (
+    f"{prefix_line}"
+    f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
+    f"{search_label}\n"
+    f"🎯 Keyword » <b>{keyword}</b>\n"
+    f"📍 Countries » <b>{len(results)}</b>\n\n"
+    f"{country_lines}\n"
+    f"⏰ {time_str} | {date_str}"
+)
     return msg
 
 
