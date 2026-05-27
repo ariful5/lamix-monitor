@@ -296,7 +296,8 @@ msg = (
     f"📍 Countries » <b>{len(results)}</b>\n\n"
     f"{country_lines}\n"
     f"⏰ {time_str} | {date_str}"
-)
+# ✅ সঠিক - ) এবং return একই level এ থাকবে
+    )
     return msg
 
 
