@@ -204,12 +204,12 @@ def handle_add(uid, text, config, sha):
     if keyword in config[uid_str]['keywords']:
         send(uid, f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!")
         return config, sha
-    is_admin = (uid_str == str(ADMIN_ID))
+is_admin = (uid_str == str(ADMIN_ID))
     limit = 999 if is_admin else 1
     if len(config[uid_str]['keywords']) >= limit:
-    if not is_admin:
-        send(uid, "❌ আপনি আর keyword যোগ করতে পারবেন না।\n\nপুরনোটা মুছে নতুন যোগ করুন:\n<code>/remove keyword</code>")
-    return config, sha
+        if not is_admin:
+            send(uid, "❌ আপনি আর keyword যোগ করতে পারবেন না।\n\nপুরনোটা মুছে নতুন যোগ করুন:\n<code>/remove keyword</code>")
+        return config, sha
     config[uid_str]['keywords'].append(keyword)
     new_sha = save_config(config, sha)
     if new_sha:
