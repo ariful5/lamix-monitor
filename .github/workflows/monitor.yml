@@ -1,11 +1,10 @@
 name: Lamix Country Monitor
 
-# Schedule resync - 27 May 2026 12:30 PM BD
+# External Cron (cron-job.org) - প্রতি ৫ মিনিটে চলবে
+# GitHub এর নিজস্ব schedule বন্ধ করা হয়েছে কারণ এটা অনির্ভরযোগ্য
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+  workflow_dispatch:     # এটা খুব জরুরি — cron-job.org এর জন্য দরকার
 
 permissions:
   contents: write
