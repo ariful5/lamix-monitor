@@ -1,5 +1,8 @@
 name: Lamix Country Monitor
 
+# External Cron (cron-job.org) দিয়ে প্রতি ৫ মিনিটে চালানো হয়
+# Last updated: 27 May 2026
+
 on:
   workflow_dispatch:
 
@@ -27,12 +30,12 @@ jobs:
 
       - name: Run monitor
         env:
-          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
-          SEARCH_IN_BODY:   'false'
-          MY_PAT_TOKEN:     ${{ secrets.MY_PAT_TOKEN }}
-          ADMIN_ID:         ${{ secrets.ADMIN_ID }}
-          GITHUB_REPO:      ariful5/lamix-monitor
-
+          TELEGRAM_TOKEN:     ${{ secrets.TELEGRAM_TOKEN }}
+          SEARCH_IN_BODY:     'false'
+          MY_PAT_TOKEN:       ${{ secrets.MY_PAT_TOKEN }}
+          ADMIN_ID:           ${{ secrets.ADMIN_ID }}
+          ALERT_GROUP_ID:     ${{ secrets.ALERT_GROUP_ID }}     # গ্রুপে মেসেজ পাঠানোর জন্য
+          GITHUB_REPO:        ariful5/lamix-monitor
         run: python monitor.py
 
       - name: Save results to repo
@@ -41,5 +44,5 @@ jobs:
           git config user.email "bot@lamix-monitor"
           echo "$(date -u '+%Y-%m-%d %H:%M UTC')" > last_run.txt
           git add last_results.json last_run.txt users_config.json || true
-          git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')" || true
           git push || true
