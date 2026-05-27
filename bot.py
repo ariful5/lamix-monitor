@@ -2,9 +2,7 @@ import os
 import json
 import base64
 import requests
-from datetime import datetime, timezone, timedelta
 
-# ─── Config ───────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 GITHUB_TOKEN   = os.environ.get('MY_PAT_TOKEN', '')
 GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/lamix-monitor')
@@ -32,7 +30,6 @@ def gh_get(filename):
     return None, None
 
 def gh_save(filename, content_str, sha=None, msg="Update"):
-    """Save file to GitHub. Returns new SHA if successful, None if failed."""
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
     content = base64.b64encode(content_str.encode()).decode()
     body = {'message': msg, 'content': content}
@@ -40,7 +37,6 @@ def gh_save(filename, content_str, sha=None, msg="Update"):
         body['sha'] = sha
     r = requests.put(url, headers=GH_HEADERS, json=body, timeout=10)
     if r.status_code in [200, 201]:
-        # ✅ FIX: নতুন SHA return করো
         return r.json().get('content', {}).get('sha')
     print(f"❌ gh_save failed [{r.status_code}]: {r.text[:200]}")
     return None
@@ -52,7 +48,6 @@ def load_config():
     return {}, None
 
 def save_config(config, sha=None):
-    """Returns new SHA or None on failure."""
     return gh_save(CONFIG_FILE,
                    json.dumps(config, indent=2, ensure_ascii=False),
                    sha, "🔧 Update user config")
@@ -86,6 +81,36 @@ def send(chat_id, text, reply_markup=None):
         params['reply_markup'] = json.dumps(reply_markup)
     tg('sendMessage', **params)
 
+# ─── Bot Commands Setup ───────────────────────────────────
+def set_bot_commands():
+    # সব user-এর জন্য default commands
+    tg('setMyCommands',
+       commands=[
+           {"command": "start",  "description": "🤖 Bot শুরু করুন"},
+           {"command": "add",    "description": "➕ Keyword যোগ করুন"},
+           {"command": "remove", "description": "➖ Keyword মুছুন"},
+           {"command": "list",   "description": "📋 সব keyword দেখুন"},
+       ],
+       scope={"type": "default"})
+
+    # Admin-এর জন্য আলাদা command list (সব command)
+    if ADMIN_ID:
+        tg('setMyCommands',
+           commands=[
+               {"command": "start",   "description": "🤖 Bot শুরু করুন"},
+               {"command": "add",     "description": "➕ Keyword যোগ করুন"},
+               {"command": "remove",  "description": "➖ Keyword মুছুন"},
+               {"command": "list",    "description": "📋 সব keyword দেখুন"},
+               {"command": "users",   "description": "👥 সব user দেখুন"},
+               {"command": "approve", "description": "✅ User approve করুন"},
+               {"command": "reject",  "description": "❌ User reject করুন"},
+               {"command": "revoke",  "description": "🚫 Access বন্ধ করুন"},
+           ],
+           scope={"type": "chat", "chat_id": int(ADMIN_ID)})
+
+    print("✅ Bot commands set করা হয়েছে")
+
+# ─── Notify Admin ─────────────────────────────────────────
 def notify_admin(uid, name, username):
     if not ADMIN_ID:
         return
@@ -99,15 +124,14 @@ def notify_admin(uid, name, username):
         f"👤 নাম: <b>{name}</b>\n"
         f"🆔 ID: <code>{uid}</code>\n"
         f"📛 Username: {uname}\n\n"
-        f"⚡ <b>Command দিয়ে:</b>\n"
+        f"⚡ <b>Command দিয়ে এখনই:</b>\n"
         f"<code>/approve {uid}</code>\n"
         f"<code>/reject {uid}</code>\n\n"
-        f"অথবা উপরের বাটন চাপুন (১ মিনিট পরে কাজ করবে)।",
+        f"অথবা বাটন চাপুন (পরের cron-এ কাজ করবে)।",
         reply_markup=markup)
 
 # ─── Command Handlers ─────────────────────────────────────
 def handle_start(uid, name, username, config, sha):
-    """Returns (config, sha)"""
     uid_str = str(uid)
 
     if uid_str == str(ADMIN_ID):
@@ -127,14 +151,11 @@ def handle_start(uid, name, username, config, sha):
             f"/add /remove /list")
         return config, sha
 
-    # ✅ FIX: user আগে থেকে আছে কিনা চেক করো
     if uid_str not in config:
-        # নতুন user — config-এ add করো এবং admin-কে জানাও
         config[uid_str] = {'name': name, 'status': STATUS_PENDING, 'keywords': []}
         new_sha = save_config(config, sha)
         if new_sha:
             sha = new_sha
-            # ✅ Save সফল হলে তবেই admin-কে জানাও
             notify_admin(uid, name, username)
             send(uid,
                 f"👋 হ্যালো <b>{name}</b>!\n\n"
@@ -142,12 +163,10 @@ def handle_start(uid, name, username, config, sha):
                 f"আপনার request Admin-এর কাছে পাঠানো হয়েছে।\n"
                 f"Approve হলে আপনাকে জানানো হবে। 🔔")
         else:
-            # Save fail হলে config থেকে সরিয়ে দাও
             del config[uid_str]
             send(uid, "⚠️ সার্ভার সমস্যা। একটু পরে আবার /start দিন।")
         return config, sha
 
-    # ইতিমধ্যে config-এ আছে
     status = config[uid_str].get('status')
     if status == STATUS_APPROVED:
         send(uid,
@@ -171,7 +190,6 @@ def check_access(uid_str, config):
     return config.get(uid_str, {}).get('status') == STATUS_APPROVED
 
 def handle_add(uid, text, config, sha):
-    """Returns (config, sha)"""
     uid_str = str(uid)
     if not check_access(uid_str, config):
         send(uid, "⛔ আপনার access নেই।")
@@ -186,9 +204,12 @@ def handle_add(uid, text, config, sha):
     if keyword in config[uid_str]['keywords']:
         send(uid, f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!")
         return config, sha
-    if len(config[uid_str]['keywords']) >= 10:
-        send(uid, "❌ সর্বোচ্চ ১০টা keyword রাখা যাবে।")
-        return config, sha
+    is_admin = (uid_str == str(ADMIN_ID))
+    limit = 999 if is_admin else 1
+    if len(config[uid_str]['keywords']) >= limit:
+    if not is_admin:
+        send(uid, "❌ আপনি আর keyword যোগ করতে পারবেন না।\n\nপুরনোটা মুছে নতুন যোগ করুন:\n<code>/remove keyword</code>")
+    return config, sha
     config[uid_str]['keywords'].append(keyword)
     new_sha = save_config(config, sha)
     if new_sha:
@@ -200,7 +221,6 @@ def handle_add(uid, text, config, sha):
     return config, sha
 
 def handle_remove(uid, text, config, sha):
-    """Returns (config, sha)"""
     uid_str = str(uid)
     if not check_access(uid_str, config):
         send(uid, "⛔ আপনার access নেই।")
@@ -258,7 +278,6 @@ def handle_users(uid, config):
     send(uid, text)
 
 def handle_approve_reject_revoke(uid, text, config, sha, action):
-    """Returns (config, sha)"""
     if str(uid) != str(ADMIN_ID):
         return config, sha
     parts = text.split()
@@ -297,7 +316,6 @@ def handle_approve_reject_revoke(uid, text, config, sha, action):
     return config, sha
 
 def handle_callback(callback, config, sha):
-    """Returns (config, sha)"""
     uid  = callback['from']['id']
     data = callback.get('data', '')
 
@@ -358,6 +376,9 @@ def handle_callback(callback, config, sha):
 # ─── Main ─────────────────────────────────────────────────
 def main():
     print("🤖 Bot check শুরু...")
+
+    # Command list set করো (প্রতিবার run-এ, কোনো ক্ষতি নেই)
+    set_bot_commands()
 
     offset, offset_sha = load_offset()
     config, config_sha = load_config()
