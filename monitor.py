@@ -293,7 +293,6 @@ def main():
     reply_markup = {
         "inline_keyboard": [[
             {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
-            {"text": "📋 My Keywords", "url": "https://t.me/LamixAlertBot"},
         ]]
     }
 
