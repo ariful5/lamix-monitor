@@ -332,16 +332,28 @@ def main():
                     flag = get_flag(r)
                     country_lines += f"{i}. {r} {flag}\n"
 
-                msg = (
+                # পার্সোনাল মেসেজ (আগের মতোই)
+                personal_msg = (
                     f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
                     f"🎯 Website » <b>{keyword}</b>\n"
                     f"📍 Countries » <b>{len(result)}</b>\n\n"
                     f"{country_lines}\n"
                     f"⏰ {time_str} | {date_str}"
                 )
-                send_telegram(uid, msg, reply_markup)
+
+                send_telegram(uid, personal_msg, reply_markup)
+
+                # গ্রুপের জন্য মেসেজ (ইউজারের নাম সহ)
                 if ALERT_GROUP_ID:
-                    send_telegram(int(ALERT_GROUP_ID), msg)
+                    group_msg = (
+                        f"👤 <b>{name}</b>\n\n"
+                        f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
+                        f"🎯 Website » <b>{keyword}</b>\n"
+                        f"📍 Countries » <b>{len(result)}</b>\n\n"
+                        f"{country_lines}\n"
+                        f"⏰ {time_str} | {date_str}"
+                    )
+                    send_telegram(int(ALERT_GROUP_ID), group_msg)
 
             else:
                 print(f"   ℹ️ {keyword} → কোনো result নেই")
