@@ -19,7 +19,6 @@ STATUS_PENDING  = 'pending'
 STATUS_APPROVED = 'approved'
 STATUS_BANNED   = 'banned'
 
-# ─── GitHub Storage ───────────────────────────────────────
 def gh_get(filename):
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
     r = requests.get(url, headers=GH_HEADERS, timeout=10)
@@ -64,7 +63,6 @@ def load_offset():
 def save_offset(offset, sha=None):
     return gh_save(OFFSET_FILE, str(offset), sha, "Update offset")
 
-# ─── Telegram API ─────────────────────────────────────────
 def tg(method, **kwargs):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
     r = requests.post(url, json=kwargs, timeout=15)
@@ -81,9 +79,7 @@ def send(chat_id, text, reply_markup=None):
         params['reply_markup'] = json.dumps(reply_markup)
     tg('sendMessage', **params)
 
-# ─── Bot Commands Setup ───────────────────────────────────
 def set_bot_commands():
-    # সব user-এর জন্য default commands
     tg('setMyCommands',
        commands=[
            {"command": "start",  "description": "🤖 Bot শুরু করুন"},
@@ -92,8 +88,6 @@ def set_bot_commands():
            {"command": "list",   "description": "📋 সব keyword দেখুন"},
        ],
        scope={"type": "default"})
-
-    # Admin-এর জন্য আলাদা command list (সব command)
     if ADMIN_ID:
         tg('setMyCommands',
            commands=[
@@ -107,10 +101,8 @@ def set_bot_commands():
                {"command": "revoke",  "description": "🚫 Access বন্ধ করুন"},
            ],
            scope={"type": "chat", "chat_id": int(ADMIN_ID)})
-
     print("✅ Bot commands set করা হয়েছে")
 
-# ─── Notify Admin ─────────────────────────────────────────
 def notify_admin(uid, name, username):
     if not ADMIN_ID:
         return
@@ -130,10 +122,8 @@ def notify_admin(uid, name, username):
         f"অথবা বাটন চাপুন (পরের cron-এ কাজ করবে)।",
         reply_markup=markup)
 
-# ─── Command Handlers ─────────────────────────────────────
 def handle_start(uid, name, username, config, sha):
     uid_str = str(uid)
-
     if uid_str == str(ADMIN_ID):
         if uid_str not in config:
             config[uid_str] = {'name': name, 'status': STATUS_APPROVED, 'keywords': []}
@@ -204,11 +194,14 @@ def handle_add(uid, text, config, sha):
     if keyword in config[uid_str]['keywords']:
         send(uid, f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!")
         return config, sha
-is_admin = (uid_str == str(ADMIN_ID))
+    is_admin = (uid_str == str(ADMIN_ID))
     limit = 999 if is_admin else 1
     if len(config[uid_str]['keywords']) >= limit:
         if not is_admin:
-            send(uid, "❌ আপনি আর keyword যোগ করতে পারবেন না।\n\nপুরনোটা মুছে নতুন যোগ করুন:\n<code>/remove keyword</code>")
+            send(uid,
+                "❌ আপনি আর keyword যোগ করতে পারবেন না।\n\n"
+                "পুরনোটা মুছে নতুন যোগ করুন:\n"
+                "<code>/remove keyword</code>")
         return config, sha
     config[uid_str]['keywords'].append(keyword)
     new_sha = save_config(config, sha)
@@ -318,10 +311,8 @@ def handle_approve_reject_revoke(uid, text, config, sha, action):
 def handle_callback(callback, config, sha):
     uid  = callback['from']['id']
     data = callback.get('data', '')
-
     if str(uid) != str(ADMIN_ID):
         return config, sha
-
     if data.startswith("approve_"):
         target = data.replace("approve_", "")
         if target in config:
@@ -344,7 +335,6 @@ def handle_callback(callback, config, sha):
                 tg('answerCallbackQuery',
                    callback_query_id=callback['id'],
                    text="⚠️ Save ব্যর্থ! আবার চেষ্টা করুন।")
-
     elif data.startswith("reject_"):
         target = data.replace("reject_", "")
         if target in config:
@@ -370,14 +360,10 @@ def handle_callback(callback, config, sha):
                 tg('answerCallbackQuery',
                    callback_query_id=callback['id'],
                    text="⚠️ Save ব্যর্থ! আবার চেষ্টা করুন।")
-
     return config, sha
 
-# ─── Main ─────────────────────────────────────────────────
 def main():
     print("🤖 Bot check শুরু...")
-
-    # Command list set করো (প্রতিবার run-এ, কোনো ক্ষতি নেই)
     set_bot_commands()
 
     offset, offset_sha = load_offset()
@@ -421,7 +407,6 @@ def main():
             continue
 
         print(f"   💬 {name} ({uid}): {text}")
-
         cmd = text.split()[0].lower().split('@')[0]
 
         if cmd == '/start':
