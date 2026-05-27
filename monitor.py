@@ -249,7 +249,7 @@ def send_telegram(chat_id, message, reply_markup=None):
 def main():
     bd_tz = timezone(timedelta(hours=6))
     now = datetime.now(bd_tz)
-    time_str = now.strftime('%H:%M')
+    time_str = now.strftime('%I:%M %p')
     date_str = now.strftime('%d.%m.%y')
 
     print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M')}")
