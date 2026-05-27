@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import base64
 import requests
@@ -93,9 +94,9 @@ def set_bot_commands():
         tg('setMyCommands',
            commands=[
                {"command": "start",    "description": "🤖 Bot শুরু করুন"},
-               {"command": "add",      "description": "➕ Keyword যোগ করুন"},
-               {"command": "remove",   "description": "➖ Keyword মুছুন"},
-               {"command": "list",     "description": "📋 সব keyword দেখুন"},
+               {"command": "add",      "description": "➕ CLI Keyword যোগ করুন"},
+               {"command": "remove",   "description": "➖ CLI Keyword মুছুন"},
+               {"command": "list",     "description": "📋 সব CLI keyword দেখুন"},
                {"command": "users",    "description": "👥 সব user দেখুন"},
                {"command": "approve",  "description": "✅ User approve করুন"},
                {"command": "reject",   "description": "❌ User reject করুন"},
@@ -201,16 +202,53 @@ def handle_add(uid, text, config, sha):
     if not check_access(uid_str, config):
         send(uid, "⛔ আপনার access নেই।")
         return config, sha
+
     parts = text.split(maxsplit=1)
     if len(parts) < 2:
-        send(uid, "⚠️ লিখুন: <code>/add example.com</code>")
+        send(uid,
+            "⚠️ সঠিকভাবে লিখুন:\n"
+            "<code>/add CLI_নাম</code>\n\n"
+            "🟢 উদাহরণ:\n"
+            "<code>/add Douyin</code>\n"
+            "<code>/add xapp</code>")
         return config, sha
+
     keyword = parts[1].strip().lower()
+
+    # URL হলে block করুন
+    url_pattern = r'(https?://|www\.|\.(com|net|org|io|co|xyz|tk|info|ly|me|app)|/)'
+    if re.search(url_pattern, keyword, re.IGNORECASE):
+        send(uid,
+            f"🚫 <b>URL যোগ করা যাবে না!</b>\n\n"
+            f"❌ ভুল: <code>{keyword}</code>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📖 <b>সঠিক CLI কীভাবে পাবেন?</b>\n\n"
+            f"1️⃣ Lamix অ্যাকাউন্টে Login করুন\n\n"
+            f"2️⃣ SMS CDR Report-এ যান\n\n"
+            f"3️⃣ যে ওয়েবসাইটের Alert চান\n"
+            f"   সেই ওয়েবসাইট থেকে আগে\n"
+            f"   আপনার কাছে যে SMS এসেছিল\n"
+            f"   সেটা খুঁজে বের করুন\n\n"
+            f"4️⃣ ঐ SMS-এর উপর Click করুন\n\n"
+            f"5️⃣ পাশে CLI কলামে একটা\n"
+            f"   নাম দেখতে পাবেন\n"
+            f"   (যেমন: Douyin, xapp)\n\n"
+            f"6️⃣ ঐ নামটাই Copy করে\n"
+            f"   এখানে যোগ করুন\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🟢 এভাবে দিন:\n"
+            f"<code>/add Douyin</code>\n"
+            f"<code>/add xapp</code>\n"
+            f"<code>/add InfobipSMS</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━")
+        return config, sha
+
     if uid_str not in config:
         config[uid_str] = {'name': '', 'status': STATUS_APPROVED, 'keywords': [], 'limit': DEFAULT_LIMIT}
     if keyword in config[uid_str]['keywords']:
         send(uid, f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!")
         return config, sha
+
     is_admin = (uid_str == str(ADMIN_ID))
     limit = 999 if is_admin else config[uid_str].get('limit', DEFAULT_LIMIT)
     if len(config[uid_str]['keywords']) >= limit:
@@ -220,11 +258,33 @@ def handle_add(uid, text, config, sha):
                 f"পুরনোটা মুছে নতুন যোগ করুন:\n"
                 f"<code>/remove keyword</code>")
         return config, sha
+
     config[uid_str]['keywords'].append(keyword)
     new_sha = save_config(config, sha)
     if new_sha:
         sha = new_sha
-        send(uid, f"✅ <b>{keyword}</b> যোগ হয়েছে!\n📊 মোট: <b>{len(config[uid_str]['keywords'])}</b> keywords")
+        send(uid,
+            f"✅ <b>{keyword}</b> যোগ হয়েছে!\n"
+            f"📊 মোট: <b>{len(config[uid_str]['keywords'])}</b> keywords\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚠️ <b>গুরুত্বপূর্ণ!</b>\n\n"
+            f"আপনি কি সঠিক CLI দিয়েছেন?\n"
+            f"নিচের ধাপে মিলিয়ে নিন 👇\n\n"
+            f"1️⃣ Lamix অ্যাকাউন্টে Login করুন\n\n"
+            f"2️⃣ SMS CDR Report-এ যান\n\n"
+            f"3️⃣ যে ওয়েবসাইটের Alert চান\n"
+            f"   সেই ওয়েবসাইট থেকে আগে\n"
+            f"   আপনার কাছে যে SMS এসেছিল\n"
+            f"   সেটা খুঁজে বের করুন\n\n"
+            f"4️⃣ ঐ SMS-এর পাশে CLI কলামে\n"
+            f"   যে নাম দেখছেন সেটার সাথে\n"
+            f"   আপনার দেওয়া নাম মিলিয়ে নিন\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ মিললে → আপনি সঠিক করেছেন!\n"
+            f"❌ না মিললে → এখনই ঠিক করুন:\n\n"
+            f"<code>/remove {keyword}</code>\n"
+            f"তারপর: <code>/add সঠিক_CLI_নাম</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━")
     else:
         config[uid_str]['keywords'].remove(keyword)
         send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
@@ -261,7 +321,7 @@ def handle_list(uid, config):
     keywords = config.get(uid_str, {}).get('keywords', [])
     limit = config.get(uid_str, {}).get('limit', DEFAULT_LIMIT)
     if not keywords:
-        send(uid, "📋 কোনো keyword নেই।\n<code>/add example.com</code> দিয়ে যোগ করুন।")
+        send(uid, "📋 কোনো keyword নেই।\n<code>/add CLI_নাম</code> দিয়ে যোগ করুন।")
         return
     lines = '\n'.join([f"  {i+1}. <code>{kw}</code>" for i, kw in enumerate(keywords)])
     send(uid, f"📋 <b>আপনার Keywords ({len(keywords)}/{limit})</b>\n\n{lines}")
@@ -477,43 +537,4 @@ def main():
         if not msg:
             continue
 
-        uid   = msg['from']['id']
-        name  = msg['from'].get('first_name', 'User')
-        uname = msg['from'].get('username', '')
-        text  = msg.get('text', '').strip()
-
-        if not text:
-            continue
-
-        print(f"   💬 {name} ({uid}): {text}")
-        cmd = text.split()[0].lower().split('@')[0]
-
-        if cmd == '/start':
-            config, config_sha = handle_start(uid, name, uname, config, config_sha)
-        elif cmd == '/add':
-            config, config_sha = handle_add(uid, text, config, config_sha)
-        elif cmd == '/remove':
-            config, config_sha = handle_remove(uid, text, config, config_sha)
-        elif cmd == '/list':
-            handle_list(uid, config)
-        elif cmd == '/users':
-            handle_users(uid, config)
-        elif cmd == '/notice':
-            handle_notice(uid, text, config)
-        elif cmd == '/setlimit':
-            config, config_sha = handle_setlimit(uid, text, config, config_sha)
-        elif cmd == '/approve':
-            config, config_sha = handle_approve_reject_revoke(uid, text, config, config_sha, 'approve')
-        elif cmd == '/reject':
-            config, config_sha = handle_approve_reject_revoke(uid, text, config, config_sha, 'reject')
-        elif cmd == '/revoke':
-            config, config_sha = handle_approve_reject_revoke(uid, text, config, config_sha, 'revoke')
-
-    if new_offset != offset:
-        save_offset(new_offset, offset_sha)
-        print(f"   ✅ Offset updated: {new_offset}")
-
-    print("✅ Bot check শেষ!")
-
-if __name__ == '__main__':
-    main()
+        
