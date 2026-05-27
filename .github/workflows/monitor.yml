@@ -2,9 +2,8 @@ name: Lamix Country Monitor
 
 on:
   schedule:
-    - cron: '0 * * * *'   # প্রতি ঘণ্টায় চলবে
-  workflow_dispatch:          # হাতে চালানোর অপশন
-# active repo - schedule enabled
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
