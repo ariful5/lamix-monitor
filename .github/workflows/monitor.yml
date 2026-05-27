@@ -39,6 +39,7 @@ jobs:
         run: |
           git config user.name  "Lamix Bot"
           git config user.email "bot@lamix-monitor"
-          git add last_results.json || true
-          git diff --staged --quiet || git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')"
+          echo "$(date -u '+%Y-%m-%d %H:%M UTC')" > last_run.txt
+          git add last_results.json last_run.txt || true
+          git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push || true
