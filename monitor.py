@@ -340,6 +340,8 @@ def main():
                     f"⏰ {time_str} | {date_str}"
                 )
                 send_telegram(uid, msg, reply_markup)
+                if ALERT_GROUP_ID:
+                    send_telegram(ALERT_GROUP_ID, msg)
 
             else:
                 print(f"   ℹ️ {keyword} → কোনো result নেই")
