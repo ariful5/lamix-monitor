@@ -5,11 +5,17 @@ import re
 import json
 from datetime import datetime, timezone, timedelta
 
-TELEGRAM_TOKEN    = os.environ.get('TELEGRAM_TOKEN', '')
-TELEGRAM_CHAT_IDS = os.environ.get('TELEGRAM_CHAT_ID', '').split(',')
-KEYWORDS          = os.environ.get('SEARCH_KEYWORDS', 'test').split(',')
-SEARCH_IN_BODY    = os.environ.get('SEARCH_IN_BODY', 'false').lower() == 'true'
-RESULTS_FILE      = 'last_results.json'
+# ─── Config ───────────────────────────────────────────────
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
+SEARCH_IN_BODY = os.environ.get('SEARCH_IN_BODY', 'false').lower() == 'true'
+GITHUB_TOKEN   = os.environ.get('GITHUB_PAT', '')
+GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/lamix-monitor')
+CONFIG_FILE    = 'users_config.json'
+
+GH_HEADERS = {
+    'Authorization': f'token {GITHUB_TOKEN}',
+    'Accept': 'application/vnd.github.v3+json'
+}
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -26,7 +32,8 @@ IGNORE_EXACT = {
     'country', 'countries', 'message', 'body', 'minute',
     'access', 'last', 'find', 'result', 'keyword',
     'lamix', 'sms', 'tool', 'in', 'the', 'from', 'out',
-    'search in message body', 'find out access from a specific cli in the last 30 minute',
+    'search in message body',
+    'find out access from a specific cli in the last 30 minute',
     'lamix cli search tool',
 }
 
@@ -62,53 +69,53 @@ VALID_COUNTRIES = {
 VALID_COUNTRIES_LOWER = {c.lower(): c for c in VALID_COUNTRIES}
 
 COUNTRY_FLAGS = {
-    "Afghanistan": "🇦🇫", "Albania": "🇦🇱", "Algeria": "🇩🇿", "Andorra": "🇦🇩",
-    "Angola": "🇦🇴", "Argentina": "🇦🇷", "Armenia": "🇦🇲", "Australia": "🇦🇺",
-    "Austria": "🇦🇹", "Azerbaijan": "🇦🇿", "Bahamas": "🇧🇸", "Bahrain": "🇧🇭",
-    "Bangladesh": "🇧🇩", "Belarus": "🇧🇾", "Belgium": "🇧🇪", "Belize": "🇧🇿",
-    "Benin": "🇧🇯", "Bhutan": "🇧🇹", "Bolivia": "🇧🇴", "Bosnia": "🇧🇦",
-    "Botswana": "🇧🇼", "Brazil": "🇧🇷", "Brunei": "🇧🇳", "Bulgaria": "🇧🇬",
-    "Burkina Faso": "🇧🇫", "Burundi": "🇧🇮", "Cambodia": "🇰🇭", "Cameroon": "🇨🇲",
-    "Canada": "🇨🇦", "Chad": "🇹🇩", "Chile": "🇨🇱", "China": "🇨🇳",
-    "Colombia": "🇨🇴", "Comoros": "🇰🇲", "Congo": "🇨🇬", "Croatia": "🇭🇷",
-    "Cuba": "🇨🇺", "Cyprus": "🇨🇾", "Czech Republic": "🇨🇿", "Denmark": "🇩🇰",
-    "Djibouti": "🇩🇯", "Dominican Republic": "🇩🇴", "Ecuador": "🇪🇨",
-    "Egypt": "🇪🇬", "El Salvador": "🇸🇻", "Eritrea": "🇪🇷", "Estonia": "🇪🇪",
-    "Ethiopia": "🇪🇹", "Fiji": "🇫🇯", "Finland": "🇫🇮", "France": "🇫🇷",
-    "Gabon": "🇬🇦", "Gambia": "🇬🇲", "Georgia": "🇬🇪", "Germany": "🇩🇪",
-    "Ghana": "🇬🇭", "Greece": "🇬🇷", "Guatemala": "🇬🇹", "Guinea": "🇬🇳",
-    "Guyana": "🇬🇾", "Haiti": "🇭🇹", "Honduras": "🇭🇳", "Hungary": "🇭🇺",
-    "Iceland": "🇮🇸", "India": "🇮🇳", "Indonesia": "🇮🇩", "Iran": "🇮🇷",
-    "Iraq": "🇮🇶", "Ireland": "🇮🇪", "Israel": "🇮🇱", "Italy": "🇮🇹",
-    "Jamaica": "🇯🇲", "Japan": "🇯🇵", "Jordan": "🇯🇴", "Kazakhstan": "🇰🇿",
-    "Kenya": "🇰🇪", "Kuwait": "🇰🇼", "Kyrgyzstan": "🇰🇬", "Laos": "🇱🇦",
-    "Latvia": "🇱🇻", "Lebanon": "🇱🇧", "Lesotho": "🇱🇸", "Liberia": "🇱🇷",
-    "Libya": "🇱🇾", "Lithuania": "🇱🇹", "Luxembourg": "🇱🇺", "Madagascar": "🇲🇬",
-    "Malawi": "🇲🇼", "Malaysia": "🇲🇾", "Maldives": "🇲🇻", "Mali": "🇲🇱",
-    "Malta": "🇲🇹", "Mauritania": "🇲🇷", "Mauritius": "🇲🇺", "Mexico": "🇲🇽",
-    "Moldova": "🇲🇩", "Mongolia": "🇲🇳", "Montenegro": "🇲🇪", "Morocco": "🇲🇦",
-    "Mozambique": "🇲🇿", "Myanmar": "🇲🇲", "Namibia": "🇳🇦", "Nepal": "🇳🇵",
-    "Netherlands": "🇳🇱", "Nicaragua": "🇳🇮", "Niger": "🇳🇪", "Nigeria": "🇳🇬",
-    "Norway": "🇳🇴", "Oman": "🇴🇲", "Pakistan": "🇵🇰", "Palestine": "🇵🇸",
-    "Panama": "🇵🇦", "Paraguay": "🇵🇾", "Peru": "🇵🇪", "Philippines": "🇵🇭",
-    "Poland": "🇵🇱", "Portugal": "🇵🇹", "Qatar": "🇶🇦", "Romania": "🇷🇴",
-    "Russia": "🇷🇺", "Rwanda": "🇷🇼", "Saudi Arabia": "🇸🇦", "Senegal": "🇸🇳",
-    "Serbia": "🇷🇸", "Sierra Leone": "🇸🇱", "Singapore": "🇸🇬", "Slovakia": "🇸🇰",
-    "Slovenia": "🇸🇮", "Somalia": "🇸🇴", "South Africa": "🇿🇦", "South Sudan": "🇸🇸",
-    "Spain": "🇪🇸", "Sri Lanka": "🇱🇰", "Sudan": "🇸🇩", "Suriname": "🇸🇷",
-    "Sweden": "🇸🇪", "Switzerland": "🇨🇭", "Syria": "🇸🇾", "Taiwan": "🇹🇼",
-    "Tajikistan": "🇹🇯", "Tanzania": "🇹🇿", "Thailand": "🇹🇭", "Togo": "🇹🇬",
-    "Trinidad and Tobago": "🇹🇹", "Tunisia": "🇹🇳", "Turkey": "🇹🇷",
-    "Turkmenistan": "🇹🇲", "Uganda": "🇺🇬", "Ukraine": "🇺🇦",
-    "United Arab Emirates": "🇦🇪", "UAE": "🇦🇪", "United Kingdom": "🇬🇧",
-    "UK": "🇬🇧", "United States": "🇺🇸", "USA": "🇺🇸", "Uruguay": "🇺🇾",
-    "Uzbekistan": "🇺🇿", "Venezuela": "🇻🇪", "Vietnam": "🇻🇳", "Yemen": "🇾🇪",
-    "Zambia": "🇿🇲", "Zimbabwe": "🇿🇼", "Ivory Coast": "🇨🇮", "North Korea": "🇰🇵",
-    "South Korea": "🇰🇷", "New Zealand": "🇳🇿", "Papua New Guinea": "🇵🇬",
-    "North Macedonia": "🇲🇰", "East Timor": "🇹🇱", "Kosovo": "🇽🇰",
-    "Cabo Verde": "🇨🇻", "Central African Republic": "🇨🇫",
-    "Democratic Republic of Congo": "🇨🇩", "Equatorial Guinea": "🇬🇶",
-    "Burkina": "🇧🇫", "Burkina Faso": "🇧🇫",
+    "Afghanistan":"🇦🇫","Albania":"🇦🇱","Algeria":"🇩🇿","Andorra":"🇦🇩",
+    "Angola":"🇦🇴","Argentina":"🇦🇷","Armenia":"🇦🇲","Australia":"🇦🇺",
+    "Austria":"🇦🇹","Azerbaijan":"🇦🇿","Bahamas":"🇧🇸","Bahrain":"🇧🇭",
+    "Bangladesh":"🇧🇩","Belarus":"🇧🇾","Belgium":"🇧🇪","Belize":"🇧🇿",
+    "Benin":"🇧🇯","Bhutan":"🇧🇹","Bolivia":"🇧🇴","Bosnia":"🇧🇦",
+    "Botswana":"🇧🇼","Brazil":"🇧🇷","Brunei":"🇧🇳","Bulgaria":"🇧🇬",
+    "Burkina Faso":"🇧🇫","Burundi":"🇧🇮","Cambodia":"🇰🇭","Cameroon":"🇨🇲",
+    "Canada":"🇨🇦","Chad":"🇹🇩","Chile":"🇨🇱","China":"🇨🇳",
+    "Colombia":"🇨🇴","Comoros":"🇰🇲","Congo":"🇨🇬","Croatia":"🇭🇷",
+    "Cuba":"🇨🇺","Cyprus":"🇨🇾","Czech Republic":"🇨🇿","Denmark":"🇩🇰",
+    "Djibouti":"🇩🇯","Dominican Republic":"🇩🇴","Ecuador":"🇪🇨",
+    "Egypt":"🇪🇬","El Salvador":"🇸🇻","Eritrea":"🇪🇷","Estonia":"🇪🇪",
+    "Ethiopia":"🇪🇹","Fiji":"🇫🇯","Finland":"🇫🇮","France":"🇫🇷",
+    "Gabon":"🇬🇦","Gambia":"🇬🇲","Georgia":"🇬🇪","Germany":"🇩🇪",
+    "Ghana":"🇬🇭","Greece":"🇬🇷","Guatemala":"🇬🇹","Guinea":"🇬🇳",
+    "Guyana":"🇬🇾","Haiti":"🇭🇹","Honduras":"🇭🇳","Hungary":"🇭🇺",
+    "Iceland":"🇮🇸","India":"🇮🇳","Indonesia":"🇮🇩","Iran":"🇮🇷",
+    "Iraq":"🇮🇶","Ireland":"🇮🇪","Israel":"🇮🇱","Italy":"🇮🇹",
+    "Jamaica":"🇯🇲","Japan":"🇯🇵","Jordan":"🇯🇴","Kazakhstan":"🇰🇿",
+    "Kenya":"🇰🇪","Kuwait":"🇰🇼","Kyrgyzstan":"🇰🇬","Laos":"🇱🇦",
+    "Latvia":"🇱🇻","Lebanon":"🇱🇧","Lesotho":"🇱🇸","Liberia":"🇱🇷",
+    "Libya":"🇱🇾","Lithuania":"🇱🇹","Luxembourg":"🇱🇺","Madagascar":"🇲🇬",
+    "Malawi":"🇲🇼","Malaysia":"🇲🇾","Maldives":"🇲🇻","Mali":"🇲🇱",
+    "Malta":"🇲🇹","Mauritania":"🇲🇷","Mauritius":"🇲🇺","Mexico":"🇲🇽",
+    "Moldova":"🇲🇩","Mongolia":"🇲🇳","Montenegro":"🇲🇪","Morocco":"🇲🇦",
+    "Mozambique":"🇲🇿","Myanmar":"🇲🇲","Namibia":"🇳🇦","Nepal":"🇳🇵",
+    "Netherlands":"🇳🇱","Nicaragua":"🇳🇮","Niger":"🇳🇪","Nigeria":"🇳🇬",
+    "Norway":"🇳🇴","Oman":"🇴🇲","Pakistan":"🇵🇰","Palestine":"🇵🇸",
+    "Panama":"🇵🇦","Paraguay":"🇵🇾","Peru":"🇵🇪","Philippines":"🇵🇭",
+    "Poland":"🇵🇱","Portugal":"🇵🇹","Qatar":"🇶🇦","Romania":"🇷🇴",
+    "Russia":"🇷🇺","Rwanda":"🇷🇼","Saudi Arabia":"🇸🇦","Senegal":"🇸🇳",
+    "Serbia":"🇷🇸","Sierra Leone":"🇸🇱","Singapore":"🇸🇬","Slovakia":"🇸🇰",
+    "Slovenia":"🇸🇮","Somalia":"🇸🇴","South Africa":"🇿🇦","South Sudan":"🇸🇸",
+    "Spain":"🇪🇸","Sri Lanka":"🇱🇰","Sudan":"🇸🇩","Suriname":"🇸🇷",
+    "Sweden":"🇸🇪","Switzerland":"🇨🇭","Syria":"🇸🇾","Taiwan":"🇹🇼",
+    "Tajikistan":"🇹🇯","Tanzania":"🇹🇿","Thailand":"🇹🇭","Togo":"🇹🇬",
+    "Trinidad and Tobago":"🇹🇹","Tunisia":"🇹🇳","Turkey":"🇹🇷",
+    "Turkmenistan":"🇹🇲","Uganda":"🇺🇬","Ukraine":"🇺🇦",
+    "United Arab Emirates":"🇦🇪","UAE":"🇦🇪","United Kingdom":"🇬🇧",
+    "UK":"🇬🇧","United States":"🇺🇸","USA":"🇺🇸","Uruguay":"🇺🇾",
+    "Uzbekistan":"🇺🇿","Venezuela":"🇻🇪","Vietnam":"🇻🇳","Yemen":"🇾🇪",
+    "Zambia":"🇿🇲","Zimbabwe":"🇿🇼","Ivory Coast":"🇨🇮","North Korea":"🇰🇵",
+    "South Korea":"🇰🇷","New Zealand":"🇳🇿","Papua New Guinea":"🇵🇬",
+    "North Macedonia":"🇲🇰","East Timor":"🇹🇱","Kosovo":"🇽🇰",
+    "Cabo Verde":"🇨🇻","Central African Republic":"🇨🇫",
+    "Democratic Republic of Congo":"🇨🇩","Equatorial Guinea":"🇬🇶",
+    "Burkina":"🇧🇫",
 }
 
 
@@ -118,17 +125,18 @@ def get_flag(entry):
     return COUNTRY_FLAGS.get(country, "🌍")
 
 
-def load_last_results():
+def load_user_config():
+    """GitHub থেকে users_config.json লোড করুন"""
+    import base64
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{CONFIG_FILE}"
     try:
-        with open(RESULTS_FILE, 'r') as f:
-            return json.load(f)
-    except:
-        return {}
-
-
-def save_results(data):
-    with open(RESULTS_FILE, 'w') as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+        r = requests.get(url, headers=GH_HEADERS, timeout=10)
+        if r.status_code == 200:
+            content = base64.b64decode(r.json()['content']).decode()
+            return json.loads(content)
+    except Exception as e:
+        print(f"   ⚠️ Config লোড error: {e}")
+    return {}
 
 
 def clean_text(txt):
@@ -144,9 +152,7 @@ def is_result_entry(txt):
         return False
     parts = re.split(r'\s*[-–]\s*', txt, maxsplit=1)
     country_part = parts[0].strip()
-    if country_part.lower() in VALID_COUNTRIES_LOWER:
-        return True
-    return False
+    return country_part.lower() in VALID_COUNTRIES_LOWER
 
 
 def get_canonical(txt):
@@ -154,8 +160,7 @@ def get_canonical(txt):
     country_part = parts[0].strip()
     canonical_country = VALID_COUNTRIES_LOWER.get(country_part.lower(), country_part)
     if len(parts) > 1:
-        operator = parts[1].strip()
-        return f"{canonical_country} - {operator}"
+        return f"{canonical_country} - {parts[1].strip()}"
     return canonical_country
 
 
@@ -187,64 +192,58 @@ def parse_results(html):
 
     for li in soup.find_all('li'):
         txt = clean_text(li.get_text(separator=' ', strip=True))
-        if txt and txt.lower() not in seen:
-            if is_result_entry(txt):
-                canonical = get_canonical(txt)
-                if canonical.lower() not in seen:
-                    results.append(canonical)
-                    seen.add(canonical.lower())
+        if txt and txt.lower() not in seen and is_result_entry(txt):
+            canonical = get_canonical(txt)
+            if canonical.lower() not in seen:
+                results.append(canonical)
+                seen.add(canonical.lower())
 
     if not results:
         for el in soup.find_all(True, class_=re.compile(r'country|result|item|cli|row|card|entry', re.I)):
             if not el.find():
                 txt = clean_text(el.get_text(strip=True))
-                if txt and txt.lower() not in seen:
-                    if is_result_entry(txt):
-                        canonical = get_canonical(txt)
-                        if canonical.lower() not in seen:
-                            results.append(canonical)
-                            seen.add(canonical.lower())
+                if txt and txt.lower() not in seen and is_result_entry(txt):
+                    canonical = get_canonical(txt)
+                    if canonical.lower() not in seen:
+                        results.append(canonical)
+                        seen.add(canonical.lower())
 
     if not results:
         for el in soup.find_all(['td', 'span', 'p']):
             if not el.find():
                 txt = clean_text(el.get_text(strip=True))
-                if txt and txt.lower() not in seen:
-                    if is_result_entry(txt):
-                        canonical = get_canonical(txt)
-                        if canonical.lower() not in seen:
-                            results.append(canonical)
-                            seen.add(canonical.lower())
+                if txt and txt.lower() not in seen and is_result_entry(txt):
+                    canonical = get_canonical(txt)
+                    if canonical.lower() not in seen:
+                        results.append(canonical)
+                        seen.add(canonical.lower())
 
     return results
 
 
-def send_telegram(message, reply_markup=None):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
-        print("   ⚠️  TELEGRAM_TOKEN বা TELEGRAM_CHAT_ID সেট নেই!")
+def send_telegram(chat_id, message, reply_markup=None):
+    """একটি নির্দিষ্ট chat_id তে message পাঠান"""
+    if not TELEGRAM_TOKEN:
         return False
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    for chat_id in TELEGRAM_CHAT_IDS:
-        chat_id = chat_id.strip()
-        if not chat_id:
-            continue
-        payload = {
-            'chat_id': chat_id,
-            'text': message,
-            'parse_mode': 'HTML',
-            'disable_web_page_preview': True,
-        }
-        if reply_markup:
-            payload['reply_markup'] = reply_markup
-        try:
-            resp = requests.post(url, json=payload, timeout=15)
-            if resp.status_code == 200:
-                print(f"   ✅ Telegram {chat_id} পাঠানো সফল!")
-            else:
-                print(f"   ❌ Telegram error {chat_id}: {resp.status_code}")
-        except Exception as e:
-            print(f"   ❌ Telegram exception {chat_id}: {e}")
-    return True
+    payload = {
+        'chat_id': chat_id,
+        'text': message,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True,
+    }
+    if reply_markup:
+        payload['reply_markup'] = json.dumps(reply_markup)
+    try:
+        resp = requests.post(url, json=payload, timeout=15)
+        if resp.status_code == 200:
+            print(f"   ✅ {chat_id} → পাঠানো সফল!")
+        else:
+            print(f"   ❌ {chat_id} → error: {resp.status_code} | {resp.text}")
+        return resp.status_code == 200
+    except Exception as e:
+        print(f"   ❌ {chat_id} → exception: {e}")
+        return False
 
 
 def main():
@@ -254,83 +253,97 @@ def main():
     date_str = now.strftime('%d.%m.%y')
 
     print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M')}")
-    print(f"   Keywords: {KEYWORDS}")
 
-    new_results_all = {}
+    # ─── ইউজার কনফিগ লোড করুন ────────────────────────────
+    user_config = load_user_config()
+    if not user_config:
+        print("   ⚠️ কোনো user config পাওয়া যায়নি!")
+        return
 
-    for keyword in KEYWORDS:
-        keyword = keyword.strip()
+    # ─── প্রতিটা keyword এর result ক্যাশ করুন ─────────────
+    keyword_cache = {}
+
+    # সব ইউজারের সব unique keyword কালেক্ট করুন
+    all_keywords = set()
+    for uid, udata in user_config.items():
+        for kw in udata.get('keywords', []):
+            all_keywords.add(kw.strip().lower())
+
+    print(f"   মোট unique keywords: {len(all_keywords)}")
+
+    # প্রতিটা keyword একবার সার্চ করুন
+    for keyword in all_keywords:
         if not keyword:
             continue
-
-        print(f"\n▶ Keyword: '{keyword}'")
-
+        print(f"\n▶ Searching: '{keyword}'")
         try:
             html = search(keyword)
-            print(f"   HTML length: {len(html)} chars")
-
             if 'recaptcha' in html.lower() and len(html) < 2000:
-                print("   ⚠️  reCAPTCHA detected!")
-                send_telegram(
+                print(f"   ⚠️ reCAPTCHA!")
+                keyword_cache[keyword] = 'captcha'
+                continue
+            results = parse_results(html)
+            print(f"   ✅ Results: {results}")
+            keyword_cache[keyword] = results
+        except Exception as e:
+            print(f"   ❌ Error: {e}")
+            keyword_cache[keyword] = 'error'
+
+    # ─── প্রতিটা ইউজারকে তার নিজের result পাঠান ───────────
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
+            {"text": "📋 My Keywords", "url": "https://t.me/LamixAlertBot"},
+        ]]
+    }
+
+    for uid, udata in user_config.items():
+        keywords = udata.get('keywords', [])
+        name = udata.get('name', 'User')
+        if not keywords:
+            continue
+
+        print(f"\n👤 ইউজার: {name} ({uid})")
+
+        for keyword in keywords:
+            keyword = keyword.strip().lower()
+            result = keyword_cache.get(keyword)
+
+            if result == 'captcha':
+                send_telegram(uid,
                     f"⚠️ <b>reCAPTCHA Block!</b>\n\n"
                     f"🔑 Keyword: <code>{keyword}</code>\n"
-                    f"🕐 {time_str} | {date_str}"
+                    f"⏰ {time_str} | {date_str}"
                 )
-                continue
 
-            current = parse_results(html)
-            print(f"   ✅ Current results: {current}")
+            elif result == 'error':
+                send_telegram(uid,
+                    f"🔴 <b>Network Error</b>\n\n"
+                    f"🎯 <code>{keyword}</code>\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"সার্ভারে কানেক্ট হয়নি\n"
+                    f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
+                    f"⏰ {time_str} | {date_str}"
+                )
 
-            new_results_all[keyword] = current
-
-            if current:
+            elif result:
                 country_lines = ''
-                for i, r in enumerate(current, 1):
+                for i, r in enumerate(result, 1):
                     flag = get_flag(r)
                     country_lines += f"{i}. {r} {flag}\n"
 
                 msg = (
-                    f"🌐💥 LIVE ALERT 💥🌐\n\n"
+                    f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
                     f"🎯 Website » <b>{keyword}</b>\n"
-                    f"📍 Countries » <b>{len(current)}</b>\n\n"
+                    f"📍 Countries » <b>{len(result)}</b>\n\n"
                     f"{country_lines}\n"
                     f"⏰ {time_str} | {date_str}"
                 )
-
-                reply_markup = {
-                    "inline_keyboard": [[
-                        {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
-                    ]]
-                }
-
-                send_telegram(msg, reply_markup)
+                send_telegram(uid, msg, reply_markup)
 
             else:
-                print(f"   ℹ️  কোনো result নেই।")
+                print(f"   ℹ️ {keyword} → কোনো result নেই")
 
-        except requests.HTTPError as e:
-            print(f"   ❌ HTTP Error: {e}")
-            send_telegram(
-                f"🔴 Network Error\n\n"
-                f"🎯 {keyword}\n"
-                f"━━━━━━━━━━━━━━\n"
-                f"সার্ভারে কানেক্ট হতে পারেনি\n"
-                f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
-                f"⏰ {time_str} | {date_str}"
-            )
-
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
-            send_telegram(
-                f"🔴 Network Error\n\n"
-                f"🎯 {keyword}\n"
-                f"━━━━━━━━━━━━━━\n"
-                f"সার্ভারে কানেক্ট হতে পারেনি\n"
-                f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
-                f"⏰ {time_str} | {date_str}"
-            )
-
-    save_results(new_results_all)
     print("\n✅ সম্পন্ন!")
 
 
