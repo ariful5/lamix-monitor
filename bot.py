@@ -371,6 +371,7 @@ def handle_approve_reject_revoke(uid, text, config, sha, action):
             send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
     elif action in ['reject', 'revoke']:
         config[target]['status'] = STATUS_BANNED
+        config[target]['keywords'] = []  # ✅ FIX: keywords clear করুন
         new_sha = save_config(config, sha)
         if new_sha:
             sha = new_sha
@@ -382,6 +383,7 @@ def handle_approve_reject_revoke(uid, text, config, sha, action):
                 pass
         else:
             config[target]['status'] = STATUS_APPROVED
+            config[target]['keywords'] = config[target].get('keywords', [])
             send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
     return config, sha
 
@@ -418,6 +420,7 @@ def handle_callback(callback, config, sha):
         target = data.replace("reject_", "")
         if target in config:
             config[target]['status'] = STATUS_BANNED
+            config[target]['keywords'] = []  # ✅ FIX: keywords clear করুন
             new_sha = save_config(config, sha)
             if new_sha:
                 sha = new_sha
@@ -517,3 +520,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
