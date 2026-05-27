@@ -85,9 +85,9 @@ def set_bot_commands():
     tg('setMyCommands',
        commands=[
            {"command": "start",  "description": "🤖 Bot শুরু করুন"},
-           {"command": "add",    "description": "➕ Keyword যোগ করুন"},
-           {"command": "remove", "description": "➖ Keyword মুছুন"},
-           {"command": "list",   "description": "📋 সব keyword দেখুন"},
+           {"command": "add",    "description": "➕ CLI Keyword যোগ করুন"},
+           {"command": "remove", "description": "➖ CLI Keyword মুছুন"},
+           {"command": "list",   "description": "📋 সব CLI keyword দেখুন"},
        ],
        scope={"type": "default"})
     if ADMIN_ID:
@@ -181,9 +181,9 @@ def handle_start(uid, name, username, config, sha):
             f"🤖 <b>Lamix Alert Bot</b>\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"⚙️ <b>কমান্ড:</b>\n"
-            f"▶ /add keyword — keyword যোগ\n"
-            f"▶ /remove keyword — keyword মুছুন\n"
-            f"▶ /list — সব keyword দেখুন\n\n"
+            f"▶ /add CLI_নাম — CLI keyword যোগ\n"
+            f"▶ /remove CLI_নাম — CLI keyword মুছুন\n"
+            f"▶ /list — সব CLI keyword দেখুন\n\n"
             f"📊 আপনার limit: <b>{limit}</b> টা keyword")
     elif status == STATUS_PENDING:
         send(uid, "⏳ আপনার request এখনো pending। একটু অপেক্ষা করুন।")
@@ -215,8 +215,8 @@ def handle_add(uid, text, config, sha):
 
     keyword = parts[1].strip().lower()
 
-    # URL হলে block করুন
-    url_pattern = r'(https?://|www\.|\.(com|net|org|io|co|xyz|tk|info|ly|me|app)|/)'
+    # URL হলে block করুন — / বাদ দেওয়া হয়েছে
+    url_pattern = r'(https?://|www\.|\.(com|net|org|io|co|xyz|tk|info|ly|me|app))'
     if re.search(url_pattern, keyword, re.IGNORECASE):
         send(uid,
             f"🚫 <b>URL যোগ করা যাবে না!</b>\n\n"
@@ -297,7 +297,7 @@ def handle_remove(uid, text, config, sha):
         return config, sha
     parts = text.split(maxsplit=1)
     if len(parts) < 2:
-        send(uid, "⚠️ লিখুন: <code>/remove example.com</code>")
+        send(uid, "⚠️ লিখুন: <code>/remove CLI_নাম</code>")
         return config, sha
     keyword = parts[1].strip().lower()
     if keyword not in config.get(uid_str, {}).get('keywords', []):
@@ -321,10 +321,10 @@ def handle_list(uid, config):
     keywords = config.get(uid_str, {}).get('keywords', [])
     limit = config.get(uid_str, {}).get('limit', DEFAULT_LIMIT)
     if not keywords:
-        send(uid, "📋 কোনো keyword নেই।\n<code>/add CLI_নাম</code> দিয়ে যোগ করুন।")
+        send(uid, "📋 কোনো CLI keyword নেই।\n<code>/add CLI_নাম</code> দিয়ে যোগ করুন।")
         return
     lines = '\n'.join([f"  {i+1}. <code>{kw}</code>" for i, kw in enumerate(keywords)])
-    send(uid, f"📋 <b>আপনার Keywords ({len(keywords)}/{limit})</b>\n\n{lines}")
+    send(uid, f"📋 <b>আপনার CLI Keywords ({len(keywords)}/{limit})</b>\n\n{lines}")
 
 def handle_users(uid, config):
     if str(uid) != str(ADMIN_ID):
@@ -533,8 +533,5 @@ def main():
             config, config_sha = handle_callback(update['callback_query'], config, config_sha)
             continue
 
-        msg = update.get('message', {})
-        if not msg:
-            continue
-
+        msg = update.get('mess
         
