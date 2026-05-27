@@ -135,7 +135,7 @@ def load_user_config():
             content = base64.b64decode(r.json()['content']).decode()
             return json.loads(content)
     except Exception as e:
-        print(f"   ⚠️ Config লোড error: {e}")
+        print(f"   Config load error: {e}")
     return {}
 
 
@@ -165,10 +165,6 @@ def get_canonical(txt):
 
 
 def search(keyword, search_in_body=False):
-    """
-    search_in_body=False → normal CLI search (toggle OFF)
-    search_in_body=True  → Message Body search (toggle ON)
-    """
     session = requests.Session()
     session.headers.update(HEADERS)
     resp = session.get('https://lamix.org/tools', timeout=30)
@@ -228,29 +224,28 @@ def parse_results(html):
 
 
 def do_search_with_retry(keyword, search_in_body=False, max_retry=3):
-    """Retry logic সহ সার্চ করুন। 'captcha', 'error', বা list রিটার্ন করে।"""
     mode_label = "BODY" if search_in_body else "CLI"
-    print(f"\n▶ Searching [{mode_label}]: '{keyword}'")
+    print(f"\n Search [{mode_label}]: '{keyword}'")
 
     for attempt in range(1, max_retry + 1):
         try:
             html = search(keyword, search_in_body=search_in_body)
 
             if 'recaptcha' in html.lower() and len(html) < 2000:
-                print(f"   ⚠️ reCAPTCHA!")
+                print(f"   reCAPTCHA!")
                 return 'captcha'
 
             results = parse_results(html)
-            print(f"   ✅ Results: {results}")
+            print(f"   Results: {results}")
             return results
 
         except Exception as e:
-            print(f"   ❌ Attempt {attempt}/{max_retry} Error: {e}")
+            print(f"   Attempt {attempt}/{max_retry} Error: {e}")
             if attempt < max_retry:
-                print(f"   ⏳ ১০ সেকেন্ড অপেক্ষা...")
+                print(f"   Waiting 10s...")
                 time.sleep(10)
 
-    print(f"   ❌ সব চেষ্টা শেষ")
+    print(f"   All attempts failed")
     return 'error'
 
 
@@ -269,12 +264,12 @@ def send_telegram(chat_id, message, reply_markup=None):
     try:
         resp = requests.post(url, json=payload, timeout=15)
         if resp.status_code == 200:
-            print(f"   ✅ {chat_id} → পাঠানো সফল!")
+            print(f"   Sent to {chat_id}")
         else:
-            print(f"   ❌ {chat_id} → error: {resp.status_code} | {resp.text}")
+            print(f"   Error {chat_id}: {resp.status_code} | {resp.text}")
         return resp.status_code == 200
     except Exception as e:
-        print(f"   ❌ {chat_id} → exception: {e}")
+        print(f"   Exception {chat_id}: {e}")
         return False
 
 
@@ -286,18 +281,18 @@ def build_alert_message(name, keyword, results, time_str, date_str,
         country_lines += f"{i}. {r} {flag}\n"
 
     search_label = "🔎 Body Search" if is_body_search else "🌐 CLI Search"
-
     prefix_line = f"👤 <b>{name}</b>\n\n" if prefix else ""
-msg = (
-            f"{prefix_line}"
-            f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
-            f"{search_label}\n"
-            f"🎯 Keyword » <b>{keyword}</b>\n"
-            f"📍 Countries » <b>{len(results)}</b>\n\n"
-            f"{country_lines}\n"
-            f"⏰ {time_str} | {date_str}"
-        )
-        return msg
+
+    msg = (
+        f"{prefix_line}"
+        f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
+        f"{search_label}\n"
+        f"🎯 Keyword » <b>{keyword}</b>\n"
+        f"📍 Countries » <b>{len(results)}</b>\n\n"
+        f"{country_lines}\n"
+        f"⏰ {time_str} | {date_str}"
+    )
+    return msg
 
 
 def main():
@@ -306,16 +301,13 @@ def main():
     time_str = now.strftime('%I:%M %p')
     date_str = now.strftime('%d.%m.%y')
 
-    print(f"🔍 Monitor শুরু: {now.strftime('%Y-%m-%d %H:%M')}")
+    print(f"Monitor start: {now.strftime('%Y-%m-%d %H:%M')}")
 
     user_config = load_user_config()
     if not user_config:
-        print("   ⚠️ কোনো user config পাওয়া যায়নি!")
+        print("   No user config found!")
         return
 
-    # ─── সব unique keyword কালেক্ট করুন (আলাদাভাবে) ──────
-    # cli_cache    → search_in_body=False
-    # body_cache   → search_in_body=True
     all_cli_keywords  = set()
     all_body_keywords = set()
 
@@ -331,24 +323,20 @@ def main():
     cli_cache  = {}
     body_cache = {}
 
-    # ─── CLI সার্চ (search_in_body=False) ─────────────────
     for keyword in all_cli_keywords:
         if keyword:
             cli_cache[keyword] = do_search_with_retry(keyword, search_in_body=False)
 
-    # ─── Body সার্চ (search_in_body=True) ─────────────────
     for keyword in all_body_keywords:
         if keyword:
             body_cache[keyword] = do_search_with_retry(keyword, search_in_body=True)
 
-    # ─── Inline keyboard ───────────────────────────────────
     reply_markup = {
         "inline_keyboard": [[
             {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
         ]]
     }
 
-    # ─── প্রতিটি user-কে result পাঠান ────────────────────
     for uid, udata in user_config.items():
         name = udata.get('name', 'User')
         cli_keywords  = [kw.strip().lower() for kw in udata.get('keywords', [])      if kw.strip()]
@@ -357,9 +345,8 @@ def main():
         if not cli_keywords and not body_keywords:
             continue
 
-        print(f"\n👤 ইউজার: {name} ({uid})")
+        print(f"\n User: {name} ({uid})")
 
-        # ── CLI keywords ──
         for keyword in cli_keywords:
             result = cli_cache.get(keyword)
             _send_result(uid, name, keyword, result,
@@ -367,7 +354,6 @@ def main():
                          is_body_search=False,
                          reply_markup=reply_markup)
 
-        # ── Body keywords ──
         for keyword in body_keywords:
             result = body_cache.get(keyword)
             _send_result(uid, name, keyword, result,
@@ -375,14 +361,13 @@ def main():
                          is_body_search=True,
                          reply_markup=reply_markup)
 
-    print("\n✅ সম্পন্ন!")
+    print("\n Done!")
 
 
 def _send_result(uid, name, keyword, result,
                  time_str, date_str,
                  is_body_search=False,
                  reply_markup=None):
-    """একজন user-কে একটি keyword এর result পাঠান।"""
 
     search_label = "Body" if is_body_search else "CLI"
 
@@ -398,8 +383,8 @@ def _send_result(uid, name, keyword, result,
             f"🔴 <b>Network Error</b>\n\n"
             f"🎯 [{search_label}] <code>{keyword}</code>\n"
             f"━━━━━━━━━━━━━━\n"
-            f"সার্ভারে কানেক্ট হয়নি\n"
-            f"পরের ৫ মিনিটে আবার চেষ্টা হবে\n\n"
+            f"Server connect failed\n"
+            f"Will retry in 5 minutes\n\n"
             f"⏰ {time_str} | {date_str}"
         )
 
@@ -410,9 +395,10 @@ def _send_result(uid, name, keyword, result,
             country_lines += f"{i}. {r} {flag}\n"
 
         search_icon = "🔎" if is_body_search else "🌐"
+        body_or_cli = "🔎 Body Search" if is_body_search else "🌐 CLI Search"
         personal_msg = (
             f"{search_icon}💥 <b>LIVE ALERT</b> 💥{search_icon}\n\n"
-            f"{'🔎 Body Search' if is_body_search else '🌐 CLI Search'}\n"
+            f"{body_or_cli}\n"
             f"🎯 Keyword » <b>{keyword}</b>\n"
             f"📍 Countries » <b>{len(result)}</b>\n\n"
             f"{country_lines}\n"
@@ -420,23 +406,23 @@ def _send_result(uid, name, keyword, result,
         )
         send_telegram(uid, personal_msg, reply_markup)
 
-        # Group alert
-        ALERT_GROUP_ID = os.environ.get('ALERT_GROUP_ID', '')
-        if ALERT_GROUP_ID:
+        alert_group = os.environ.get('ALERT_GROUP_ID', '')
+        if alert_group:
             group_msg = (
                 f"👤 <b>{name}</b>\n\n"
                 f"{search_icon}💥 <b>LIVE ALERT</b> 💥{search_icon}\n\n"
-                f"{'🔎 Body Search' if is_body_search else '🌐 CLI Search'}\n"
+                f"{body_or_cli}\n"
                 f"🎯 Keyword » <b>{keyword}</b>\n"
                 f"📍 Countries » <b>{len(result)}</b>\n\n"
                 f"{country_lines}\n"
                 f"⏰ {time_str} | {date_str}"
             )
-            send_telegram(int(ALERT_GROUP_ID), group_msg)
+            send_telegram(int(alert_group), group_msg)
 
     else:
-        print(f"   ℹ️ [{search_label}] {keyword} → কোনো result নেই")
+        print(f"   [{search_label}] {keyword} -> No results")
 
 
 if __name__ == '__main__':
     main()
+                     
