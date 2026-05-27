@@ -1,10 +1,7 @@
 name: Lamix Country Monitor
 
-# External Cron (cron-job.org) - প্রতি ৫ মিনিটে চলবে
-# GitHub এর নিজস্ব schedule বন্ধ করা হয়েছে কারণ এটা অনির্ভরযোগ্য
-
 on:
-  workflow_dispatch:     # এটা খুব জরুরি — cron-job.org এর জন্য দরকার
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -31,9 +28,11 @@ jobs:
       - name: Run monitor
         env:
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SEARCH_KEYWORDS:  ${{ secrets.SEARCH_KEYWORDS }}
           SEARCH_IN_BODY:   'false'
+          MY_PAT_TOKEN:     ${{ secrets.MY_PAT_TOKEN }}
+          ADMIN_ID:         ${{ secrets.ADMIN_ID }}
+          GITHUB_REPO:      ariful5/lamix-monitor
+
         run: python monitor.py
 
       - name: Save results to repo
@@ -41,6 +40,6 @@ jobs:
           git config user.name  "Lamix Bot"
           git config user.email "bot@lamix-monitor"
           echo "$(date -u '+%Y-%m-%d %H:%M UTC')" > last_run.txt
-          git add last_results.json last_run.txt || true
+          git add last_results.json last_run.txt users_config.json || true
           git commit -m "Update results $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push || true
