@@ -2,233 +2,369 @@ import os
 import json
 import base64
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from datetime import datetime, timezone, timedelta
 
 # ─── Config ───────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
-GITHUB_TOKEN   = os.environ.get('GITHUB_PAT', '')
+GITHUB_TOKEN   = os.environ.get('MY_PAT_TOKEN', '')
 GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/lamix-monitor')
-ADMIN_IDS      = [x.strip() for x in os.environ.get('ADMIN_IDS', '').split(',') if x.strip()]
+ADMIN_ID       = os.environ.get('ADMIN_ID', '')
 CONFIG_FILE    = 'users_config.json'
+OFFSET_FILE    = 'last_update_id.txt'
 
 GH_HEADERS = {
     'Authorization': f'token {GITHUB_TOKEN}',
     'Accept': 'application/vnd.github.v3+json'
 }
 
-# ─── GitHub Storage ────────────────────────────────────────
-def load_config():
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{CONFIG_FILE}"
+STATUS_PENDING  = 'pending'
+STATUS_APPROVED = 'approved'
+STATUS_BANNED   = 'banned'
+
+# ─── GitHub Storage ───────────────────────────────────────
+def gh_get(filename):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
     r = requests.get(url, headers=GH_HEADERS, timeout=10)
     if r.status_code == 200:
         data = r.json()
         content = base64.b64decode(data['content']).decode()
-        return json.loads(content), data['sha']
-    return {}, None
+        return content, data['sha']
+    return None, None
 
-def save_config(config, sha=None):
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{CONFIG_FILE}"
-    content = base64.b64encode(
-        json.dumps(config, indent=2, ensure_ascii=False).encode()
-    ).decode()
-    body = {'message': '🔧 Update user config', 'content': content}
+def gh_save(filename, content_str, sha=None, msg="Update"):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
+    content = base64.b64encode(content_str.encode()).decode()
+    body = {'message': msg, 'content': content}
     if sha:
         body['sha'] = sha
     r = requests.put(url, headers=GH_HEADERS, json=body, timeout=10)
     return r.status_code in [200, 201]
 
-# ─── Helpers ───────────────────────────────────────────────
-def main_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Keyword যোগ করুন", callback_data="help_add")],
-        [InlineKeyboardButton("📋 আমার Keywords", callback_data="my_list"),
-         InlineKeyboardButton("🗑 Keyword মুছুন", callback_data="help_remove")],
-        [InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/Napa_Ex")],
-    ])
+def load_config():
+    raw, sha = gh_get(CONFIG_FILE)
+    if raw:
+        return json.loads(raw), sha
+    return {}, None
 
-# ─── /start ───────────────────────────────────────────────
-async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    name = user.first_name or "বন্ধু"
+def save_config(config, sha=None):
+    return gh_save(CONFIG_FILE,
+                   json.dumps(config, indent=2, ensure_ascii=False),
+                   sha, "🔧 Update user config")
 
-    config, sha = load_config()
-    uid = str(user.id)
-    if uid not in config:
-        config[uid] = {"name": name, "keywords": []}
+def load_offset():
+    raw, sha = gh_get(OFFSET_FILE)
+    if raw:
+        try:
+            return int(raw.strip()), sha
+        except:
+            pass
+    return 0, None
+
+def save_offset(offset, sha=None):
+    return gh_save(OFFSET_FILE, str(offset), sha, "Update offset")
+
+# ─── Telegram API ─────────────────────────────────────────
+def tg(method, **kwargs):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
+    r = requests.post(url, json=kwargs, timeout=15)
+    return r.json()
+
+def send(chat_id, text, reply_markup=None):
+    params = {
+        'chat_id': chat_id,
+        'text': text,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True
+    }
+    if reply_markup:
+        params['reply_markup'] = json.dumps(reply_markup)
+    tg('sendMessage', **params)
+
+def notify_admin(uid, name, username):
+    if not ADMIN_ID:
+        return
+    uname = f"@{username}" if username else "নেই"
+    markup = {"inline_keyboard": [[
+        {"text": "✅ Approve", "callback_data": f"approve_{uid}"},
+        {"text": "❌ Reject",  "callback_data": f"reject_{uid}"}
+    ]]}
+    send(ADMIN_ID,
+        f"🔔 <b>নতুন Request!</b>\n\n"
+        f"👤 নাম: <b>{name}</b>\n"
+        f"🆔 ID: <code>{uid}</code>\n"
+        f"📛 Username: {uname}\n\n"
+        f"Approve করলে সে bot ব্যবহার করতে পারবে।",
+        reply_markup=markup)
+
+# ─── Command Handlers ─────────────────────────────────────
+def handle_start(uid, name, username, config, sha):
+    if str(uid) == str(ADMIN_ID):
+        if str(uid) not in config:
+            config[str(uid)] = {'name': name, 'status': STATUS_APPROVED, 'keywords': []}
+            save_config(config, sha)
+        send(uid,
+            f"👑 স্বাগতম Admin <b>{name}</b>!\n\n"
+            f"🛡 <b>Admin কমান্ড:</b>\n"
+            f"/users — সব user দেখুন\n"
+            f"/approve ID — approve করুন\n"
+            f"/reject ID — reject করুন\n"
+            f"/revoke ID — access বন্ধ করুন\n\n"
+            f"📋 <b>নিজের কমান্ড:</b>\n"
+            f"/add /remove /list")
+        return config
+
+    uid_str = str(uid)
+    if uid_str not in config:
+        config[uid_str] = {'name': name, 'status': STATUS_PENDING, 'keywords': []}
         save_config(config, sha)
+        notify_admin(uid, name, username)
+        send(uid,
+            f"👋 হ্যালো <b>{name}</b>!\n\n"
+            f"⏳ <b>Waiting for Approval...</b>\n\n"
+            f"আপনার request Admin-এর কাছে পাঠানো হয়েছে।\n"
+            f"Approve হলে আপনাকে জানানো হবে। 🔔")
+        return config
 
-    text = (
-        f"👋 স্বাগতম, <b>{name}</b>!\n\n"
-        f"🤖 <b>Lamix Alert Bot</b> — আপনার ব্যক্তিগত SMS মনিটর\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"📌 <b>কী করে এই বট?</b>\n"
-        f"প্রতি ৫ মিনিটে Lamix.org চেক করে, আপনার কীওয়ার্ড খুঁজে পেলে সাথে সাথে অ্যালার্ট পাঠায়।\n\n"
-        f"⚙️ <b>কমান্ড লিস্ট:</b>\n"
-        f"▶ /add keyword — নতুন keyword যোগ করুন\n"
-        f"▶ /remove keyword — keyword মুছুন\n"
-        f"▶ /list — আপনার সব keyword দেখুন\n"
-        f"▶ /help — সাহায্য\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 <b>উদাহরণ:</b>\n"
-        f"<code>/add mywebsite.com</code>\n"
-        f"<code>/remove mywebsite.com</code>\n"
-    )
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_keyboard())
+    status = config[uid_str].get('status')
+    if status == STATUS_APPROVED:
+        send(uid,
+            f"👋 স্বাগতম <b>{name}</b>!\n\n"
+            f"🤖 <b>Lamix Alert Bot</b>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚙️ <b>কমান্ড:</b>\n"
+            f"▶ /add keyword — keyword যোগ\n"
+            f"▶ /remove keyword — keyword মুছুন\n"
+            f"▶ /list — সব keyword দেখুন")
+    elif status == STATUS_PENDING:
+        send(uid, "⏳ আপনার request এখনো pending। একটু অপেক্ষা করুন।")
+    elif status == STATUS_BANNED:
+        send(uid, "🚫 দুঃখিত, আপনার access বন্ধ করা হয়েছে।")
 
-# ─── /help ────────────────────────────────────────────────
-async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "📖 <b>Help — Lamix Alert Bot</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🔹 <b>/add</b> <code>keyword</code>\n"
-        "   নতুন website/keyword মনিটর করতে যোগ করুন\n"
-        "   উদাহরণ: <code>/add example.com</code>\n\n"
-        "🔹 <b>/remove</b> <code>keyword</code>\n"
-        "   keyword মনিটর বন্ধ করতে মুছুন\n"
-        "   উদাহরণ: <code>/remove example.com</code>\n\n"
-        "🔹 <b>/list</b>\n"
-        "   আপনার সব active keyword দেখুন\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ প্রতিটা ইউজারের keyword আলাদা।\n"
-        "শুধু আপনার keyword-এর result আপনি পাবেন।"
-    )
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_keyboard())
+    return config
 
-# ─── /add ─────────────────────────────────────────────────
-async def add_keyword(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    uid = str(user.id)
+def check_access(uid_str, config):
+    if uid_str == str(ADMIN_ID):
+        return True
+    status = config.get(uid_str, {}).get('status')
+    return status == STATUS_APPROVED
 
-    if not ctx.args:
-        await update.message.reply_text(
-            "⚠️ Keyword লিখুন!\n\nউদাহরণ: <code>/add example.com</code>",
-            parse_mode='HTML'
-        )
+def handle_add(uid, text, config, sha):
+    uid_str = str(uid)
+    if not check_access(uid_str, config):
+        send(uid, "⛔ আপনার access নেই।")
+        return config
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        send(uid, "⚠️ লিখুন: <code>/add example.com</code>", )
+        return config
+    keyword = parts[1].strip().lower()
+    if uid_str not in config:
+        config[uid_str] = {'name': '', 'status': STATUS_APPROVED, 'keywords': []}
+    if keyword in config[uid_str]['keywords']:
+        send(uid, f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!")
+        return config
+    if len(config[uid_str]['keywords']) >= 10:
+        send(uid, "❌ সর্বোচ্চ ১০টা keyword রাখা যাবে।")
+        return config
+    config[uid_str]['keywords'].append(keyword)
+    save_config(config, sha)
+    send(uid, f"✅ <b>{keyword}</b> যোগ হয়েছে!\n📊 মোট: <b>{len(config[uid_str]['keywords'])}</b> keywords\n⏱ পরের ৫ মিনিটে মনিটরিং শুরু হবে।")
+    return config
+
+def handle_remove(uid, text, config, sha):
+    uid_str = str(uid)
+    if not check_access(uid_str, config):
+        send(uid, "⛔ আপনার access নেই।")
+        return config
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        send(uid, "⚠️ লিখুন: <code>/remove example.com</code>")
+        return config
+    keyword = parts[1].strip().lower()
+    if keyword not in config.get(uid_str, {}).get('keywords', []):
+        send(uid, f"❌ <b>{keyword}</b> আপনার list-এ নেই!")
+        return config
+    config[uid_str]['keywords'].remove(keyword)
+    save_config(config, sha)
+    send(uid, f"🗑 <b>{keyword}</b> সরানো হয়েছে!\n📊 বাকি: <b>{len(config[uid_str]['keywords'])}</b> keywords")
+    return config
+
+def handle_list(uid, config):
+    uid_str = str(uid)
+    if not check_access(uid_str, config):
+        send(uid, "⛔ আপনার access নেই।")
         return
-
-    keyword = ' '.join(ctx.args).strip().lower()
-    config, sha = load_config()
-
-    if uid not in config:
-        config[uid] = {"name": user.first_name or "User", "keywords": []}
-
-    if keyword in config[uid]['keywords']:
-        await update.message.reply_text(
-            f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!\n\n"
-            f"📋 আপনার keywords দেখতে: /list",
-            parse_mode='HTML'
-        )
-        return
-
-    if len(config[uid]['keywords']) >= 10:
-        await update.message.reply_text(
-            "❌ সর্বোচ্চ <b>১০টা</b> keyword রাখা যাবে।\n"
-            "আগে /remove দিয়ে কিছু মুছুন।",
-            parse_mode='HTML'
-        )
-        return
-
-    config[uid]['keywords'].append(keyword)
-    if save_config(config, sha):
-        count = len(config[uid]['keywords'])
-        await update.message.reply_text(
-            f"✅ <b>{keyword}</b> যোগ হয়েছে!\n\n"
-            f"📊 মোট keywords: <b>{count}</b>\n"
-            f"⏱ পরের ৫ মিনিটের মধ্যে মনিটরিং শুরু হবে।",
-            parse_mode='HTML'
-        )
-    else:
-        await update.message.reply_text("❌ সংরক্ষণ করতে পারিনি। আবার চেষ্টা করুন।")
-
-# ─── /remove ──────────────────────────────────────────────
-async def remove_keyword(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    uid = str(user.id)
-
-    if not ctx.args:
-        await update.message.reply_text(
-            "⚠️ Keyword লিখুন!\n\nউদাহরণ: <code>/remove example.com</code>",
-            parse_mode='HTML'
-        )
-        return
-
-    keyword = ' '.join(ctx.args).strip().lower()
-    config, sha = load_config()
-
-    if uid not in config or keyword not in config[uid].get('keywords', []):
-        await update.message.reply_text(
-            f"❌ <b>{keyword}</b> আপনার list-এ নেই!\n\n"
-            f"📋 আপনার keywords: /list",
-            parse_mode='HTML'
-        )
-        return
-
-    config[uid]['keywords'].remove(keyword)
-    if save_config(config, sha):
-        await update.message.reply_text(
-            f"🗑 <b>{keyword}</b> সরানো হয়েছে!\n\n"
-            f"📊 বাকি keywords: <b>{len(config[uid]['keywords'])}</b>",
-            parse_mode='HTML'
-        )
-    else:
-        await update.message.reply_text("❌ সংরক্ষণ করতে পারিনি। আবার চেষ্টা করুন।")
-
-# ─── /list ────────────────────────────────────────────────
-async def list_keywords(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    uid = str(user.id)
-    config, _ = load_config()
-
-    keywords = config.get(uid, {}).get('keywords', [])
+    keywords = config.get(uid_str, {}).get('keywords', [])
     if not keywords:
-        await update.message.reply_text(
-            "📋 আপনার কোনো keyword নেই।\n\n"
-            "যোগ করতে: <code>/add example.com</code>",
-            parse_mode='HTML'
-        )
+        send(uid, "📋 কোনো keyword নেই।\n<code>/add example.com</code> দিয়ে যোগ করুন।")
         return
-
     lines = '\n'.join([f"  {i+1}. <code>{kw}</code>" for i, kw in enumerate(keywords)])
-    await update.message.reply_text(
-        f"📋 <b>আপনার Keywords ({len(keywords)}/10)</b>\n\n"
-        f"{lines}\n\n"
-        f"➕ যোগ: <code>/add keyword</code>\n"
-        f"🗑 মুছুন: <code>/remove keyword</code>",
-        parse_mode='HTML'
-    )
+    send(uid, f"📋 <b>আপনার Keywords ({len(keywords)}/10)</b>\n\n{lines}")
 
-# ─── Callback ─────────────────────────────────────────────
-async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "my_list":
-        update._effective_message = query.message
-        update._effective_user = query.from_user
-        await list_keywords(update, ctx)
-    elif query.data == "help_add":
-        await query.message.reply_text(
-            "➕ Keyword যোগ করতে লিখুন:\n\n<code>/add example.com</code>",
-            parse_mode='HTML'
-        )
-    elif query.data == "help_remove":
-        await query.message.reply_text(
-            "🗑 Keyword মুছতে লিখুন:\n\n<code>/remove example.com</code>",
-            parse_mode='HTML'
-        )
+def handle_users(uid, config):
+    if str(uid) != str(ADMIN_ID):
+        return
+    approved = [(u,d) for u,d in config.items() if d.get('status')==STATUS_APPROVED]
+    pending  = [(u,d) for u,d in config.items() if d.get('status')==STATUS_PENDING]
+    banned   = [(u,d) for u,d in config.items() if d.get('status')==STATUS_BANNED]
+    text = f"👥 <b>সব Users ({len(config)})</b>\n\n"
+    if approved:
+        text += f"✅ <b>Approved ({len(approved)})</b>\n"
+        for u,d in approved:
+            text += f"  • {d.get('name','?')} | <code>{u}</code> | {len(d.get('keywords',[]))} kw\n"
+    if pending:
+        text += f"\n⏳ <b>Pending ({len(pending)})</b>\n"
+        for u,d in pending:
+            text += f"  • {d.get('name','?')} | <code>{u}</code>\n"
+    if banned:
+        text += f"\n🚫 <b>Banned ({len(banned)})</b>\n"
+        for u,d in banned:
+            text += f"  • {d.get('name','?')} | <code>{u}</code>\n"
+    send(uid, text)
+
+def handle_approve_reject_revoke(uid, text, config, sha, action):
+    if str(uid) != str(ADMIN_ID):
+        return config
+    parts = text.split()
+    if len(parts) < 2:
+        send(uid, f"ব্যবহার: <code>/{action} USER_ID</code>")
+        return config
+    target = parts[1].strip()
+    if target not in config:
+        send(uid, "❌ User পাওয়া যায়নি!")
+        return config
+    name = config[target].get('name', target)
+    if action == 'approve':
+        config[target]['status'] = STATUS_APPROVED
+        save_config(config, sha)
+        send(uid, f"✅ <b>{name}</b> Approved!")
+        send(int(target), "🎉 <b>আপনার access Approve হয়েছে!</b>\n\nএখন bot ব্যবহার করুন:\n/add /remove /list")
+    elif action in ['reject', 'revoke']:
+        config[target]['status'] = STATUS_BANNED
+        save_config(config, sha)
+        label = "Rejected" if action == 'reject' else "Revoked"
+        send(uid, f"🚫 <b>{name}</b> {label}!")
+        try:
+            send(int(target), "🚫 আপনার access বন্ধ করা হয়েছে।")
+        except:
+            pass
+    return config
+
+def handle_callback(callback, config, sha):
+    uid  = callback['from']['id']
+    data = callback.get('data', '')
+
+    if str(uid) != str(ADMIN_ID):
+        return config
+
+    if data.startswith("approve_"):
+        target = data.replace("approve_", "")
+        if target in config:
+            config[target]['status'] = STATUS_APPROVED
+            save_config(config, sha)
+            name = config[target].get('name', target)
+            tg('answerCallbackQuery',
+               callback_query_id=callback['id'],
+               text=f"✅ {name} Approved!")
+            tg('editMessageText',
+               chat_id=callback['message']['chat']['id'],
+               message_id=callback['message']['message_id'],
+               text=f"✅ <b>{name}</b> Approved!",
+               parse_mode='HTML')
+            send(int(target), "🎉 <b>আপনার access Approve হয়েছে!</b>\n\n/add /remove /list")
+
+    elif data.startswith("reject_"):
+        target = data.replace("reject_", "")
+        if target in config:
+            config[target]['status'] = STATUS_BANNED
+            save_config(config, sha)
+            name = config[target].get('name', target)
+            tg('answerCallbackQuery',
+               callback_query_id=callback['id'],
+               text=f"🚫 {name} Rejected!")
+            tg('editMessageText',
+               chat_id=callback['message']['chat']['id'],
+               message_id=callback['message']['message_id'],
+               text=f"🚫 <b>{name}</b> Rejected!",
+               parse_mode='HTML')
+            try:
+                send(int(target), "🚫 আপনার request reject হয়েছে।")
+            except:
+                pass
+
+    return config
 
 # ─── Main ─────────────────────────────────────────────────
 def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler("add", add_keyword))
-    app.add_handler(CommandHandler("remove", remove_keyword))
-    app.add_handler(CommandHandler("list", list_keywords))
-    app.add_handler(CallbackQueryHandler(callback_handler))
-    print("🤖 Bot চালু হয়েছে...")
-    app.run_polling()
+    print("🤖 Bot check শুরু...")
+
+    offset, offset_sha = load_offset()
+    config, config_sha = load_config()
+
+    params = {'timeout': 5, 'limit': 100}
+    if offset:
+        params['offset'] = offset
+
+    r = requests.get(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates",
+        params=params, timeout=15
+    )
+    data = r.json()
+
+    if not data.get('ok'):
+        print(f"❌ getUpdates error: {data}")
+        return
+
+    updates = data.get('result', [])
+    print(f"   📨 {len(updates)} টা update পাওয়া গেছে")
+
+    new_offset = offset
+    for update in updates:
+        new_offset = update['update_id'] + 1
+
+        if 'callback_query' in update:
+            config = handle_callback(update['callback_query'], config, config_sha)
+            continue
+
+        msg = update.get('message', {})
+        if not msg:
+            continue
+
+        uid  = msg['from']['id']
+        name = msg['from'].get('first_name', 'User')
+        uname = msg['from'].get('username', '')
+        text = msg.get('text', '').strip()
+
+        if not text:
+            continue
+
+        print(f"   💬 {name} ({uid}): {text}")
+
+        cmd = text.split()[0].lower().split('@')[0]
+
+        if cmd == '/start':
+            config = handle_start(uid, name, uname, config, config_sha)
+        elif cmd == '/add':
+            config = handle_add(uid, text, config, config_sha)
+        elif cmd == '/remove':
+            config = handle_remove(uid, text, config, config_sha)
+        elif cmd == '/list':
+            handle_list(uid, config)
+        elif cmd == '/users':
+            handle_users(uid, config)
+        elif cmd == '/approve':
+            config = handle_approve_reject_revoke(uid, text, config, config_sha, 'approve')
+        elif cmd == '/reject':
+            config = handle_approve_reject_revoke(uid, text, config, config_sha, 'reject')
+        elif cmd == '/revoke':
+            config = handle_approve_reject_revoke(uid, text, config, config_sha, 'revoke')
+
+    if new_offset != offset:
+        save_offset(new_offset, offset_sha)
+        print(f"   ✅ Offset updated: {new_offset}")
+
+    print("✅ Bot check শেষ!")
 
 if __name__ == '__main__':
     main()
-  
+    
