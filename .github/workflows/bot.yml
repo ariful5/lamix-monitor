@@ -1,0 +1,35 @@
+name: Lamix Bot Handler
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          MY_PAT_TOKEN:   ${{ secrets.MY_PAT_TOKEN }}
+          ADMIN_ID:       ${{ secrets.ADMIN_ID }}
+          GITHUB_REPO:    ariful5/lamix-monitor
+        run: python bot.py
+        
