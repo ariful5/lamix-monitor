@@ -1,6 +1,6 @@
 name: Lamix Country Monitor
 
-# Schedule resync - 27 May 2026
+# Schedule resync - 27 May 2026 10:30 AM BD
 
 on:
   schedule:
