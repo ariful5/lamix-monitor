@@ -1,11 +1,13 @@
 name: Lamix Country Monitor
 
-# Schedule resync - 27 May 2026 10:35 AM BD
+# Schedule resync - 27 May 2026 12:07 PM BD
 
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+  push:                  # ← এই অংশটা নতুন যোগ করুন
+    branches: [ main ]
 
 permissions:
   contents: write
