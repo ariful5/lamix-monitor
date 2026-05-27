@@ -18,6 +18,7 @@ GH_HEADERS = {
 STATUS_PENDING  = 'pending'
 STATUS_APPROVED = 'approved'
 STATUS_BANNED   = 'banned'
+DEFAULT_LIMIT   = 1
 
 def gh_get(filename):
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
@@ -91,14 +92,16 @@ def set_bot_commands():
     if ADMIN_ID:
         tg('setMyCommands',
            commands=[
-               {"command": "start",   "description": "🤖 Bot শুরু করুন"},
-               {"command": "add",     "description": "➕ Keyword যোগ করুন"},
-               {"command": "remove",  "description": "➖ Keyword মুছুন"},
-               {"command": "list",    "description": "📋 সব keyword দেখুন"},
-               {"command": "users",   "description": "👥 সব user দেখুন"},
-               {"command": "approve", "description": "✅ User approve করুন"},
-               {"command": "reject",  "description": "❌ User reject করুন"},
-               {"command": "revoke",  "description": "🚫 Access বন্ধ করুন"},
+               {"command": "start",    "description": "🤖 Bot শুরু করুন"},
+               {"command": "add",      "description": "➕ Keyword যোগ করুন"},
+               {"command": "remove",   "description": "➖ Keyword মুছুন"},
+               {"command": "list",     "description": "📋 সব keyword দেখুন"},
+               {"command": "users",    "description": "👥 সব user দেখুন"},
+               {"command": "approve",  "description": "✅ User approve করুন"},
+               {"command": "reject",   "description": "❌ User reject করুন"},
+               {"command": "revoke",   "description": "🚫 Access বন্ধ করুন"},
+               {"command": "notice",   "description": "📢 সবাইকে notice পাঠান"},
+               {"command": "setlimit", "description": "🔢 User limit পরিবর্তন করুন"},
            ],
            scope={"type": "chat", "chat_id": int(ADMIN_ID)})
     print("✅ Bot commands set করা হয়েছে")
@@ -126,7 +129,12 @@ def handle_start(uid, name, username, config, sha):
     uid_str = str(uid)
     if uid_str == str(ADMIN_ID):
         if uid_str not in config:
-            config[uid_str] = {'name': name, 'status': STATUS_APPROVED, 'keywords': []}
+            config[uid_str] = {
+                'name': name,
+                'status': STATUS_APPROVED,
+                'keywords': [],
+                'limit': 999
+            }
             new_sha = save_config(config, sha)
             if new_sha:
                 sha = new_sha
@@ -136,13 +144,20 @@ def handle_start(uid, name, username, config, sha):
             f"/users — সব user দেখুন\n"
             f"/approve ID — approve করুন\n"
             f"/reject ID — reject করুন\n"
-            f"/revoke ID — access বন্ধ করুন\n\n"
+            f"/revoke ID — access বন্ধ করুন\n"
+            f"/notice বার্তা — সবাইকে notice পাঠান\n"
+            f"/setlimit ID সংখ্যা — limit পরিবর্তন করুন\n\n"
             f"📋 <b>নিজের কমান্ড:</b>\n"
             f"/add /remove /list")
         return config, sha
 
     if uid_str not in config:
-        config[uid_str] = {'name': name, 'status': STATUS_PENDING, 'keywords': []}
+        config[uid_str] = {
+            'name': name,
+            'status': STATUS_PENDING,
+            'keywords': [],
+            'limit': DEFAULT_LIMIT
+        }
         new_sha = save_config(config, sha)
         if new_sha:
             sha = new_sha
@@ -159,6 +174,7 @@ def handle_start(uid, name, username, config, sha):
 
     status = config[uid_str].get('status')
     if status == STATUS_APPROVED:
+        limit = config[uid_str].get('limit', DEFAULT_LIMIT)
         send(uid,
             f"👋 স্বাগতম <b>{name}</b>!\n\n"
             f"🤖 <b>Lamix Alert Bot</b>\n\n"
@@ -166,7 +182,8 @@ def handle_start(uid, name, username, config, sha):
             f"⚙️ <b>কমান্ড:</b>\n"
             f"▶ /add keyword — keyword যোগ\n"
             f"▶ /remove keyword — keyword মুছুন\n"
-            f"▶ /list — সব keyword দেখুন")
+            f"▶ /list — সব keyword দেখুন\n\n"
+            f"📊 আপনার limit: <b>{limit}</b> টা keyword")
     elif status == STATUS_PENDING:
         send(uid, "⏳ আপনার request এখনো pending। একটু অপেক্ষা করুন।")
     elif status == STATUS_BANNED:
@@ -190,18 +207,18 @@ def handle_add(uid, text, config, sha):
         return config, sha
     keyword = parts[1].strip().lower()
     if uid_str not in config:
-        config[uid_str] = {'name': '', 'status': STATUS_APPROVED, 'keywords': []}
+        config[uid_str] = {'name': '', 'status': STATUS_APPROVED, 'keywords': [], 'limit': DEFAULT_LIMIT}
     if keyword in config[uid_str]['keywords']:
         send(uid, f"⚠️ <b>{keyword}</b> আগে থেকেই আছে!")
         return config, sha
     is_admin = (uid_str == str(ADMIN_ID))
-    limit = 999 if is_admin else 1
+    limit = 999 if is_admin else config[uid_str].get('limit', DEFAULT_LIMIT)
     if len(config[uid_str]['keywords']) >= limit:
         if not is_admin:
             send(uid,
-                "❌ আপনি আর keyword যোগ করতে পারবেন না।\n\n"
-                "পুরনোটা মুছে নতুন যোগ করুন:\n"
-                "<code>/remove keyword</code>")
+                f"❌ আপনি আর keyword যোগ করতে পারবেন না।\n\n"
+                f"পুরনোটা মুছে নতুন যোগ করুন:\n"
+                f"<code>/remove keyword</code>")
         return config, sha
     config[uid_str]['keywords'].append(keyword)
     new_sha = save_config(config, sha)
@@ -242,11 +259,12 @@ def handle_list(uid, config):
         send(uid, "⛔ আপনার access নেই।")
         return
     keywords = config.get(uid_str, {}).get('keywords', [])
+    limit = config.get(uid_str, {}).get('limit', DEFAULT_LIMIT)
     if not keywords:
         send(uid, "📋 কোনো keyword নেই।\n<code>/add example.com</code> দিয়ে যোগ করুন।")
         return
     lines = '\n'.join([f"  {i+1}. <code>{kw}</code>" for i, kw in enumerate(keywords)])
-    send(uid, f"📋 <b>আপনার Keywords ({len(keywords)}/10)</b>\n\n{lines}")
+    send(uid, f"📋 <b>আপনার Keywords ({len(keywords)}/{limit})</b>\n\n{lines}")
 
 def handle_users(uid, config):
     if str(uid) != str(ADMIN_ID):
@@ -258,7 +276,8 @@ def handle_users(uid, config):
     if approved:
         text += f"✅ <b>Approved ({len(approved)})</b>\n"
         for u,d in approved:
-            text += f"  • {d.get('name','?')} | <code>{u}</code> | {len(d.get('keywords',[]))} kw\n"
+            limit = d.get('limit', DEFAULT_LIMIT)
+            text += f"  • {d.get('name','?')} | <code>{u}</code> | {len(d.get('keywords',[]))}/{limit} kw\n"
     if pending:
         text += f"\n⏳ <b>Pending ({len(pending)})</b>\n"
         for u,d in pending:
@@ -269,6 +288,62 @@ def handle_users(uid, config):
         for u,d in banned:
             text += f"  • {d.get('name','?')} | <code>{u}</code>\n"
     send(uid, text)
+
+def handle_notice(uid, text, config):
+    if str(uid) != str(ADMIN_ID):
+        return
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        send(uid, "⚠️ লিখুন: <code>/notice আপনার বার্তা</code>")
+        return
+    notice_text = parts[1].strip()
+    approved_users = [u for u,d in config.items() if d.get('status') == STATUS_APPROVED]
+    success = 0
+    failed = 0
+    for target_uid in approved_users:
+        try:
+            send(int(target_uid),
+                f"📢 <b>Admin Notice</b>\n\n"
+                f"{notice_text}")
+            success += 1
+        except:
+            failed += 1
+    send(uid,
+        f"📢 <b>Notice পাঠানো হয়েছে!</b>\n\n"
+        f"✅ সফল: <b>{success}</b> জন\n"
+        f"❌ ব্যর্থ: <b>{failed}</b> জন")
+
+def handle_setlimit(uid, text, config, sha):
+    if str(uid) != str(ADMIN_ID):
+        return config, sha
+    parts = text.split()
+    if len(parts) < 3:
+        send(uid, "⚠️ লিখুন: <code>/setlimit USER_ID সংখ্যা</code>")
+        return config, sha
+    target = parts[1].strip()
+    try:
+        new_limit = int(parts[2].strip())
+    except:
+        send(uid, "❌ সংখ্যাটা সঠিক নয়।")
+        return config, sha
+    if new_limit < 1:
+        send(uid, "❌ limit কমপক্ষে ১ হতে হবে।")
+        return config, sha
+    if target not in config:
+        send(uid, "❌ User পাওয়া যায়নি!")
+        return config, sha
+    config[target]['limit'] = new_limit
+    new_sha = save_config(config, sha)
+    if new_sha:
+        sha = new_sha
+        name = config[target].get('name', target)
+        send(uid, f"✅ <b>{name}</b> এর limit <b>{new_limit}</b> করা হয়েছে!")
+        send(int(target),
+            f"🔔 আপনার keyword limit পরিবর্তন হয়েছে!\n\n"
+            f"📊 নতুন limit: <b>{new_limit}</b> টা keyword")
+    else:
+        send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
+    return config, sha
 
 def handle_approve_reject_revoke(uid, text, config, sha, action):
     if str(uid) != str(ADMIN_ID):
@@ -284,6 +359,8 @@ def handle_approve_reject_revoke(uid, text, config, sha, action):
     name = config[target].get('name', target)
     if action == 'approve':
         config[target]['status'] = STATUS_APPROVED
+        if 'limit' not in config[target]:
+            config[target]['limit'] = DEFAULT_LIMIT
         new_sha = save_config(config, sha)
         if new_sha:
             sha = new_sha
@@ -317,6 +394,8 @@ def handle_callback(callback, config, sha):
         target = data.replace("approve_", "")
         if target in config:
             config[target]['status'] = STATUS_APPROVED
+            if 'limit' not in config[target]:
+                config[target]['limit'] = DEFAULT_LIMIT
             new_sha = save_config(config, sha)
             if new_sha:
                 sha = new_sha
@@ -419,6 +498,10 @@ def main():
             handle_list(uid, config)
         elif cmd == '/users':
             handle_users(uid, config)
+        elif cmd == '/notice':
+            handle_notice(uid, text, config)
+        elif cmd == '/setlimit':
+            config, config_sha = handle_setlimit(uid, text, config, config_sha)
         elif cmd == '/approve':
             config, config_sha = handle_approve_reject_revoke(uid, text, config, config_sha, 'approve')
         elif cmd == '/reject':
