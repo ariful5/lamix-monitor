@@ -215,7 +215,6 @@ def handle_add(uid, text, config, sha):
 
     keyword = parts[1].strip().lower()
 
-    # URL হলে block করুন — / বাদ দেওয়া হয়েছে
     url_pattern = r'(https?://|www\.|\.(com|net|org|io|co|xyz|tk|info|ly|me|app))'
     if re.search(url_pattern, keyword, re.IGNORECASE):
         send(uid,
@@ -533,5 +532,6 @@ def main():
             config, config_sha = handle_callback(update['callback_query'], config, config_sha)
             continue
 
-        msg = update.get('mess
-        
+        msg = update.get('message', {})
+        if not msg:
+            conti
