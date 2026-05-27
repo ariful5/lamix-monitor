@@ -11,6 +11,7 @@ SEARCH_IN_BODY = os.environ.get('SEARCH_IN_BODY', 'false').lower() == 'true'
 GITHUB_TOKEN   = os.environ.get('MY_PAT_TOKEN', '')
 GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/lamix-monitor')
 CONFIG_FILE    = 'users_config.json'
+ALERT_GROUP_ID = os.environ.get('ALERT_GROUP_ID', '')
 
 GH_HEADERS = {
     'Authorization': f'token {GITHUB_TOKEN}',
