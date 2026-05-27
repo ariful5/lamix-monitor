@@ -4,6 +4,7 @@ import os
 import re
 import json
 from datetime import datetime, timezone, timedelta
+import time   # ← Retry এর জন্য যোগ করা হয়েছে
 
 # ─── Config ───────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
@@ -272,23 +273,37 @@ def main():
 
     print(f"   মোট unique keywords: {len(all_keywords)}")
 
-    # প্রতিটা keyword একবার সার্চ করুন
+    # ================== Retry Logic সহ সার্চ ==================
     for keyword in all_keywords:
         if not keyword:
             continue
+            
         print(f"\n▶ Searching: '{keyword}'")
-        try:
-            html = search(keyword)
-            if 'recaptcha' in html.lower() and len(html) < 2000:
-                print(f"   ⚠️ reCAPTCHA!")
-                keyword_cache[keyword] = 'captcha'
-                continue
-            results = parse_results(html)
-            print(f"   ✅ Results: {results}")
-            keyword_cache[keyword] = results
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
-            keyword_cache[keyword] = 'error'
+        
+        MAX_RETRY = 3
+        for attempt in range(1, MAX_RETRY + 1):
+            try:
+                html = search(keyword)
+                
+                if 'recaptcha' in html.lower() and len(html) < 2000:
+                    print(f"   ⚠️ reCAPTCHA!")
+                    keyword_cache[keyword] = 'captcha'
+                    break
+                    
+                results = parse_results(html)
+                print(f"   ✅ Results: {results}")
+                keyword_cache[keyword] = results
+                break   # সফল হলে লুপ বন্ধ
+                
+            except Exception as e:
+                print(f"   ❌ Attempt {attempt}/{MAX_RETRY} Error: {e}")
+                if attempt < MAX_RETRY:
+                    print(f"   ⏳ ১০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
+                    time.sleep(10)
+                else:
+                    keyword_cache[keyword] = 'error'
+                    print(f"   ❌ সব চেষ্টা শেষ")
+    # =========================================================
 
     # ─── প্রতিটা ইউজারকে তার নিজের result পাঠান ───────────
     reply_markup = {
@@ -332,7 +347,6 @@ def main():
                     flag = get_flag(r)
                     country_lines += f"{i}. {r} {flag}\n"
 
-                # পার্সোনাল মেসেজ (আগের মতোই)
                 personal_msg = (
                     f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
                     f"🎯 Website » <b>{keyword}</b>\n"
@@ -343,7 +357,6 @@ def main():
 
                 send_telegram(uid, personal_msg, reply_markup)
 
-                # গ্রুপের জন্য মেসেজ (ইউজারের নাম সহ)
                 if ALERT_GROUP_ID:
                     group_msg = (
                         f"👤 <b>{name}</b>\n\n"
