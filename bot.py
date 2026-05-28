@@ -496,4 +496,207 @@ def handle_users(uid, config):
             limit = d.get('limit', DEFAULT_LIMIT)
             cli_kw  = len(d.get('keywords', []))
             body_kw = len(d.get('body_keywords', []))
-            paused  = len(d.
+            paused  = len(d.get('paused_keywords', {}))
+            paused_str = f" | ⏸{paused}" if paused else ""
+            text += f"  • {d.get('name','?')} | <code>{u}</code> | CLI:{cli_kw} Body:{body_kw}{paused_str} /{limit}\n"
+    if pending:
+        text += f"\n⏳ <b>Pending ({len(pending)})</b>\n"
+        for u,d in pending:
+            text += f"  • {d.get('name','?')} | <code>{u}</code>\n"
+            text += f"    👉 <code>/approve {u}</code> | <code>/reject {u}</code>\n"
+    if banned:
+        text += f"\n🚫 <b>Banned ({len(banned)})</b>\n"
+        for u,d in banned:
+            text += f"  • {d.get('name','?')} | <code>{u}</code>\n"
+    send(uid, text)
+
+def handle_notice(uid, text, config):
+    if str(uid) != str(ADMIN_ID):
+        return
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        send(uid, "⚠️ লিখুন: <code>/notice আপনার বার্তা</code>")
+        return
+    notice_text = parts[1].strip()
+    approved_users = [u for u,d in config.items() if d.get('status') == STATUS_APPROVED]
+    success = 0
+    failed = 0
+    for target_uid in approved_users:
+        try:
+            send(int(target_uid),
+                f"📢 <b>Admin Notice</b>\n\n"
+                f"{notice_text}")
+            success += 1
+        except:
+            failed += 1
+    send(uid,
+        f"📢 <b>Notice পাঠানো হয়েছে!</b>\n\n"
+        f"✅ সফল: <b>{success}</b> জন\n"
+        f"❌ ব্যর্থ: <b>{failed}</b> জন")
+
+def handle_setlimit(uid, text, config, sha):
+    if str(uid) != str(ADMIN_ID):
+        return config, sha
+    parts = text.split()
+    if len(parts) < 3:
+        send(uid, "⚠️ লিখুন: <code>/setlimit USER_ID সংখ্যা</code>")
+        return config, sha
+    target = parts[1].strip()
+    try:
+        new_limit = int(parts[2].strip())
+    except:
+        send(uid, "❌ সংখ্যাটা সঠিক নয়।")
+        return config, sha
+    if new_limit < 1:
+        send(uid, "❌ limit কমপক্ষে ১ হতে হবে।")
+        return config, sha
+    if target not in config:
+        send(uid, "❌ User পাওয়া যায়নি!")
+        return config, sha
+    config[target]['limit'] = new_limit
+    new_sha = save_config(config, sha)
+    if new_sha:
+        sha = new_sha
+        name = config[target].get('name', target)
+        send(uid, f"✅ <b>{name}</b> এর limit <b>{new_limit}</b> করা হয়েছে!")
+        send(int(target),
+            f"🔔 আপনার keyword limit পরিবর্তন হয়েছে!\n\n"
+            f"📊 নতুন limit: <b>{new_limit}</b> টা keyword (CLI + Body মিলিয়ে)")
+    else:
+        send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
+    return config, sha
+
+def handle_approve_reject_revoke(uid, text, config, sha, action):
+    if str(uid) != str(ADMIN_ID):
+        return config, sha
+    parts = text.split()
+    if len(parts) < 2:
+        send(uid, f"ব্যবহার: <code>/{action} USER_ID</code>")
+        return config, sha
+    target = parts[1].strip()
+    if target not in config:
+        send(uid, "❌ User পাওয়া যায়নি!")
+        return config, sha
+    name = config[target].get('name', target)
+    if action == 'approve':
+        config[target]['status'] = STATUS_APPROVED
+        if 'limit' not in config[target]:
+            config[target]['limit'] = DEFAULT_LIMIT
+        if 'body_keywords' not in config[target]:
+            config[target]['body_keywords'] = []
+        if 'paused_keywords' not in config[target]:
+            config[target]['paused_keywords'] = {}
+        new_sha = save_config(config, sha)
+        if new_sha:
+            sha = new_sha
+            send(uid, f"✅ <b>{name}</b> Approved!")
+            send(int(target),
+                "🎉 <b>আপনার access Approve হয়েছে!</b>\n\n"
+                "এখন bot ব্যবহার করুন:\n"
+                "/add /remove — CLI keyword\n"
+                "/addbody /removebody — Body keyword\n"
+                "/pause keyword 30 — keyword বন্ধ\n"
+                "/resume keyword — keyword চালু\n"
+                "/list — সব দেখুন")
+        else:
+            config[target]['status'] = STATUS_PENDING
+            send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
+    elif action in ['reject', 'revoke']:
+        config[target]['status'] = STATUS_BANNED
+        config[target]['keywords'] = []
+        config[target]['body_keywords'] = []
+        config[target]['paused_keywords'] = {}
+        new_sha = save_config(config, sha)
+        if new_sha:
+            sha = new_sha
+            label = "Rejected" if action == 'reject' else "Revoked"
+            send(uid, f"🚫 <b>{name}</b> {label}!")
+            try:
+                send(int(target), "🚫 আপনার access বন্ধ করা হয়েছে।")
+            except:
+                pass
+        else:
+            config[target]['status'] = STATUS_APPROVED
+            send(uid, "⚠️ সংরক্ষণ ব্যর্থ। আবার চেষ্টা করুন।")
+    return config, sha
+
+def handle_callback(callback, config, sha):
+    uid  = callback['from']['id']
+    data = callback.get('data', '')
+    if str(uid) != str(ADMIN_ID):
+        return config, sha
+    if data.startswith('approve_') or data.startswith('reject_'):
+        action, target = data.split('_', 1)
+        fake_text = f"/{action} {target}"
+        config, sha = handle_approve_reject_revoke(uid, fake_text, config, sha, action)
+    return config, sha
+
+def process_update(update, config, sha):
+    if 'callback_query' in update:
+        config, sha = handle_callback(update['callback_query'], config, sha)
+        return config, sha
+
+    msg = update.get('message', {})
+    if not msg:
+        return config, sha
+
+    uid      = msg['from']['id']
+    name     = msg['from'].get('first_name', 'User')
+    username = msg['from'].get('username', '')
+    text     = msg.get('text', '').strip()
+
+    if not text:
+        return config, sha
+
+    if text.startswith('/start'):
+        config, sha = handle_start(uid, name, username, config, sha)
+    elif text.startswith('/addbody'):
+        config, sha = handle_addbody(uid, text, config, sha)
+    elif text.startswith('/add'):
+        config, sha = handle_add(uid, text, config, sha)
+    elif text.startswith('/removebody'):
+        config, sha = handle_removebody(uid, text, config, sha)
+    elif text.startswith('/remove'):
+        config, sha = handle_remove(uid, text, config, sha)
+    elif text.startswith('/pause'):
+        config, sha = handle_pause(uid, text, config, sha)
+    elif text.startswith('/resume'):
+        config, sha = handle_resume(uid, text, config, sha)
+    elif text.startswith('/list'):
+        handle_list(uid, config)
+    elif text.startswith('/users'):
+        handle_users(uid, config)
+    elif text.startswith('/notice'):
+        handle_notice(uid, text, config)
+    elif text.startswith('/setlimit'):
+        config, sha = handle_setlimit(uid, text, config, sha)
+    elif text.startswith('/approve'):
+        config, sha = handle_approve_reject_revoke(uid, text, config, sha, 'approve')
+    elif text.startswith('/reject'):
+        config, sha = handle_approve_reject_revoke(uid, text, config, sha, 'reject')
+    elif text.startswith('/revoke'):
+        config, sha = handle_approve_reject_revoke(uid, text, config, sha, 'revoke')
+
+    return config, sha
+
+def main():
+    set_bot_commands()
+    offset, offset_sha = load_offset()
+    config, config_sha = load_config()
+
+    result = tg('getUpdates', offset=offset, timeout=30)
+    updates = result.get('result', [])
+
+    if not updates:
+        print("📭 কোনো নতুন update নেই।")
+        return
+
+    for update in updates:
+        config, config_sha = process_update(update, config, config_sha)
+        offset = update['update_id'] + 1
+
+    offset_sha = save_offset(offset, offset_sha)
+    print(f"✅ {len(updates)} টা update process হয়েছে।")
+
+if __name__ == '__main__':
+    main()
