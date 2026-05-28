@@ -3,14 +3,17 @@ from bs4 import BeautifulSoup
 import os
 import re
 import json
+import random
+import base64
 from datetime import datetime, timezone, timedelta
 import time
 
 # ─── Config ───────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 GITHUB_TOKEN   = os.environ.get('MY_PAT_TOKEN', '')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'ariful5/my-project-2024')
+GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/my-project-2024')
 CONFIG_FILE    = 'users_config.json'
+STATE_FILE     = 'monitor_state.json'
 ALERT_GROUP_ID = os.environ.get('ALERT_GROUP_ID', '')
 
 GH_HEADERS = {
@@ -18,8 +21,21 @@ GH_HEADERS = {
     'Accept': 'application/vnd.github.v3+json'
 }
 
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
+]
+
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+    'User-Agent': random.choice(USER_AGENTS),
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.5',
     'Origin': 'https://lamix.org',
@@ -27,6 +43,7 @@ HEADERS = {
 }
 
 STATUS_APPROVED = 'approved'
+MAX_SESSION_FAIL = 3  # টানা কতটা session fail হলে alert পাঠাবে
 
 IGNORE_EXACT = {
     'search', 'results', 'search results', 'cli', 'cli search',
@@ -125,30 +142,21 @@ COUNTRY_FLAGS = {
 # ─── Pause / Active Check ─────────────────────────────────
 
 def is_keyword_active(uid_str, keyword, udata):
-    """
-    keyword এখন active কিনা চেক করো।
-    সময় শেষ হলে True রিটার্ন করে (auto-resume হবে bot.py-তে)।
-    """
     paused = udata.get('paused_keywords', {})
-
     if keyword not in paused:
-        return True  # কখনো pause হয়নি
-
+        return True
     try:
         resume_time = datetime.fromisoformat(paused[keyword])
     except Exception:
-        return True  # invalid datetime → active ধরো
-
+        return True
     if datetime.utcnow() >= resume_time:
-        return True  # সময় শেষ → active
-
-    return False  # এখনো paused
+        return True
+    return False
 
 
 # ─── GitHub Config Load ───────────────────────────────────
 
 def load_user_config():
-    import base64
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{CONFIG_FILE}"
     try:
         r = requests.get(url, headers=GH_HEADERS, timeout=10)
@@ -158,6 +166,45 @@ def load_user_config():
     except Exception as e:
         print(f"   Config load error: {e}")
     return {}
+
+
+# ─── GitHub State Load / Save ────────────────────────────
+# monitor_state.json এ টানা failure count রাখা হয়
+# Format: { "cli:keyword": 2, "body:keyword": 1, ... }
+
+def load_monitor_state():
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{STATE_FILE}"
+    try:
+        r = requests.get(url, headers=GH_HEADERS, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            content = base64.b64decode(data['content']).decode()
+            state = json.loads(content)
+            state['_sha'] = data['sha']
+            return state
+    except Exception as e:
+        print(f"   State load error: {e}")
+    return {}
+
+
+def save_monitor_state(state):
+    sha = state.pop('_sha', None)
+    content = base64.b64encode(json.dumps(state, indent=2).encode()).decode()
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{STATE_FILE}"
+    payload = {
+        'message': 'Update monitor state',
+        'content': content,
+    }
+    if sha:
+        payload['sha'] = sha
+    try:
+        r = requests.put(url, headers=GH_HEADERS, json=payload, timeout=10)
+        if r.status_code in (200, 201):
+            print(f"   State saved.")
+        else:
+            print(f"   State save error: {r.status_code}")
+    except Exception as e:
+        print(f"   State save exception: {e}")
 
 
 # ─── Text Helpers ─────────────────────────────────────────
@@ -196,6 +243,8 @@ def get_flag(entry):
 # ─── Scraper ──────────────────────────────────────────────
 
 def search(keyword, search_in_body=False):
+    # প্রতিটা request-এ নতুন random UA
+    HEADERS['User-Agent'] = random.choice(USER_AGENTS)
     session = requests.Session()
     session.headers.update(HEADERS)
     resp = session.get('https://lamix.org/tools', timeout=30)
@@ -255,15 +304,27 @@ def parse_results(html):
 
 
 def do_search_with_retry(keyword, search_in_body=False, max_retry=3):
+    """
+    প্রতিটা attempt-এ নতুন random UA দিয়ে try করে।
+    captcha বা error হলে 5 সেকেন্ড অপেক্ষা করে পরের attempt।
+    ৩ attempt-এ সর্বোচ্চ ~২.৫ মিনিট।
+    """
     mode_label = "BODY" if search_in_body else "CLI"
     print(f"\n Search [{mode_label}]: '{keyword}'")
 
     for attempt in range(1, max_retry + 1):
+        ua = random.choice(USER_AGENTS)
+        HEADERS['User-Agent'] = ua
+        print(f"   Attempt {attempt}/{max_retry} | UA: ...{ua[-30:]}")
+
         try:
             html = search(keyword, search_in_body=search_in_body)
 
             if 'recaptcha' in html.lower() and len(html) < 2000:
-                print(f"   reCAPTCHA!")
+                print(f"   reCAPTCHA detected! Switching UA...")
+                if attempt < max_retry:
+                    time.sleep(5)
+                    continue
                 return 'captcha'
 
             results = parse_results(html)
@@ -271,12 +332,12 @@ def do_search_with_retry(keyword, search_in_body=False, max_retry=3):
             return results
 
         except Exception as e:
-            print(f"   Attempt {attempt}/{max_retry} Error: {e}")
+            print(f"   Error: {e}")
             if attempt < max_retry:
-                print(f"   Waiting 10s...")
-                time.sleep(10)
+                print(f"   Waiting 5s before retry...")
+                time.sleep(5)
 
-    print(f"   All attempts failed")
+    print(f"   All {max_retry} attempts failed")
     return 'error'
 
 
@@ -315,22 +376,10 @@ def _send_result(uid, name, keyword, result,
 
     search_label = "Body" if is_body_search else "CLI"
 
-    if result == 'captcha':
-        send_telegram(uid,
-            f"⚠️ <b>reCAPTCHA Block!</b>\n\n"
-            f"🔑 Keyword [{search_label}]: <code>{keyword}</code>\n"
-            f"⏰ {time_str} | {date_str}"
-        )
-
-    elif result == 'error':
-        send_telegram(uid,
-            f"🔴 <b>Network Error</b>\n\n"
-            f"🎯 [{search_label}] <code>{keyword}</code>\n"
-            f"━━━━━━━━━━━━━━\n"
-            f"Server connect failed\n"
-            f"Will retry in 5 minutes\n\n"
-            f"⏰ {time_str} | {date_str}"
-        )
+    if result in ('captcha', 'error'):
+        # single session fail → কোনো বার্তা পাঠাবে না
+        print(f"   [{search_label}] '{keyword}' session failed ({result}) — no alert sent")
+        return
 
     elif result:
         country_lines = ''
@@ -368,6 +417,31 @@ def _send_result(uid, name, keyword, result,
         print(f"   [{search_label}] {keyword} -> No results")
 
 
+# ─── Consecutive Failure Alert ────────────────────────────
+
+def send_consecutive_fail_alert(uid, name, keyword, fail_count, mode_label, time_str, date_str):
+    """টানা ৩ session fail হলে এই বার্তা পাঠাবে।"""
+    msg = (
+        f"🚨 <b>CONSECUTIVE FAIL ALERT</b> 🚨\n\n"
+        f"👤 User: <b>{name}</b>\n"
+        f"🔍 Mode: <b>{mode_label}</b>\n"
+        f"🎯 Keyword: <code>{keyword}</code>\n\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"❌ টানা <b>{fail_count} বার</b> search fail হয়েছে!\n"
+        f"প্রতিটা session-এ ৩ বার retry করেও\n"
+        f"কোনো result পাওয়া যায়নি।\n\n"
+        f"⚠️ সম্ভাব্য কারণ:\n"
+        f"• Site reCAPTCHA block করছে\n"
+        f"• Server down আছে\n"
+        f"• Network সমস্যা\n\n"
+        f"⏰ {time_str} | {date_str}"
+    )
+    send_telegram(uid, msg)
+    alert_group = os.environ.get('ALERT_GROUP_ID', '')
+    if alert_group:
+        send_telegram(int(alert_group), msg)
+
+
 # ─── Main ─────────────────────────────────────────────────
 
 def main():
@@ -383,7 +457,8 @@ def main():
         print("   No user config found!")
         return
 
-    # ── শুধু approved ইউজারদের নিয়ে কাজ করো ──────────────
+    monitor_state = load_monitor_state()
+
     approved_users = {
         uid: udata
         for uid, udata in user_config.items()
@@ -394,7 +469,7 @@ def main():
         print("   No approved users!")
         return
 
-    # ── Active keyword সংগ্রহ করো (paused বাদ দিয়ে) ───────
+    # ── Active keyword সংগ্রহ ──────────────────────────────
     all_cli_keywords  = set()
     all_body_keywords = set()
 
@@ -409,18 +484,46 @@ def main():
             if kw and is_keyword_active(uid, kw, udata):
                 all_body_keywords.add(kw)
 
-    print(f"   Active CLI keywords  : {len(all_cli_keywords)}")
-    print(f"   Active Body keywords : {len(all_body_keywords)}")
+    # ── Random order ────────────────────────────────────────
+    cli_keywords_list  = list(all_cli_keywords)
+    body_keywords_list = list(all_body_keywords)
+    random.shuffle(cli_keywords_list)
+    random.shuffle(body_keywords_list)
 
-    # ── Search (একবার করে, সবার জন্য cache) ───────────────
+    print(f"   Active CLI keywords  : {len(cli_keywords_list)} → {cli_keywords_list}")
+    print(f"   Active Body keywords : {len(body_keywords_list)} → {body_keywords_list}")
+
+    # ── Search cache ────────────────────────────────────────
     cli_cache  = {}
     body_cache = {}
 
-    for keyword in all_cli_keywords:
+    for keyword in cli_keywords_list:
         cli_cache[keyword] = do_search_with_retry(keyword, search_in_body=False)
 
-    for keyword in all_body_keywords:
+    for keyword in body_keywords_list:
         body_cache[keyword] = do_search_with_retry(keyword, search_in_body=True)
+
+    # ── Failure state update ────────────────────────────────
+    state_changed = False
+
+    def update_fail_state(state_key, result, uid, name, mode_label):
+        nonlocal state_changed
+        if result in ('captcha', 'error'):
+            prev = monitor_state.get(state_key, 0)
+            monitor_state[state_key] = prev + 1
+            state_changed = True
+            print(f"   Fail count [{state_key}]: {monitor_state[state_key]}")
+            if monitor_state[state_key] >= MAX_SESSION_FAIL:
+                send_consecutive_fail_alert(
+                    uid, name, state_key.split(':', 1)[1],
+                    monitor_state[state_key], mode_label,
+                    time_str, date_str
+                )
+                monitor_state[state_key] = 0  # reset after alert
+        else:
+            if monitor_state.get(state_key, 0) > 0:
+                monitor_state[state_key] = 0
+                state_changed = True
 
     reply_markup = {
         "inline_keyboard": [[
@@ -428,42 +531,48 @@ def main():
         ]]
     }
 
-    # ── প্রতিটি approved ইউজারকে alert পাঠাও ─────────────
+    # ── প্রতিটি approved ইউজারকে alert পাঠাও ──────────────
     for uid, udata in approved_users.items():
         name = udata.get('name', 'User')
 
-        cli_keywords = [
+        cli_kws = [
             kw.strip().lower()
             for kw in udata.get('keywords', [])
             if kw.strip() and is_keyword_active(uid, kw.strip().lower(), udata)
         ]
-        body_keywords = [
+        body_kws = [
             kw.strip().lower()
             for kw in udata.get('body_keywords', [])
             if kw.strip() and is_keyword_active(uid, kw.strip().lower(), udata)
         ]
 
-        if not cli_keywords and not body_keywords:
+        if not cli_kws and not body_kws:
             print(f"\n User: {name} ({uid}) — কোনো active keyword নেই, skip")
             continue
 
         print(f"\n User: {name} ({uid})")
-        print(f"   CLI  active : {cli_keywords}")
-        print(f"   Body active : {body_keywords}")
 
-        for keyword in cli_keywords:
+        for keyword in cli_kws:
             result = cli_cache.get(keyword)
+            state_key = f"cli:{keyword}"
+            update_fail_state(state_key, result, uid, name, "🌐 CLI Search")
             _send_result(uid, name, keyword, result,
                          time_str, date_str,
                          is_body_search=False,
                          reply_markup=reply_markup)
 
-        for keyword in body_keywords:
+        for keyword in body_kws:
             result = body_cache.get(keyword)
+            state_key = f"body:{keyword}"
+            update_fail_state(state_key, result, uid, name, "🔎 Body Search")
             _send_result(uid, name, keyword, result,
                          time_str, date_str,
                          is_body_search=True,
                          reply_markup=reply_markup)
+
+    # ── State save ──────────────────────────────────────────
+    if state_changed:
+        save_monitor_state(monitor_state)
 
     print("\n Done!")
 
