@@ -4,17 +4,14 @@
     "status": "approved",
     "keywords": [
       "eben",
-      "sporty",
-      "facebook"
+      "sporty"
     ],
     "body_keywords": [
       "tomra",
       "facebook"
     ],
     "limit": 999,
-    "paused_keywords": {
-      "facebook": "2026-05-28T01:28:47.424746"
-    }
+    "paused_keywords": {}
   },
   "5170624540": {
     "name": "Asif",
