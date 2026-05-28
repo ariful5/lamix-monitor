@@ -684,7 +684,7 @@ def main():
     offset, offset_sha = load_offset()
     config, config_sha = load_config()
 
-    result = tg('getUpdates', offset=offset, timeout=30)
+    result = tg('getUpdates', offset=offset, timeout=5)
     updates = result.get('result', [])
 
     if not updates:
