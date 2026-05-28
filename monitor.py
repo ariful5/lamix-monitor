@@ -26,6 +26,8 @@ HEADERS = {
     'Referer': 'https://lamix.org/tools',
 }
 
+STATUS_APPROVED = 'approved'
+
 IGNORE_EXACT = {
     'search', 'results', 'search results', 'cli', 'cli search',
     'tools', 'toggle', 'mode', 'submit', 'loading', 'please', 'wait',
@@ -120,11 +122,30 @@ COUNTRY_FLAGS = {
 }
 
 
-def get_flag(entry):
-    parts = re.split(r'\s*[-–]\s*', entry, maxsplit=1)
-    country = parts[0].strip()
-    return COUNTRY_FLAGS.get(country, "🌍")
+# ─── Pause / Active Check ─────────────────────────────────
 
+def is_keyword_active(uid_str, keyword, udata):
+    """
+    keyword এখন active কিনা চেক করো।
+    সময় শেষ হলে True রিটার্ন করে (auto-resume হবে bot.py-তে)।
+    """
+    paused = udata.get('paused_keywords', {})
+
+    if keyword not in paused:
+        return True  # কখনো pause হয়নি
+
+    try:
+        resume_time = datetime.fromisoformat(paused[keyword])
+    except Exception:
+        return True  # invalid datetime → active ধরো
+
+    if datetime.utcnow() >= resume_time:
+        return True  # সময় শেষ → active
+
+    return False  # এখনো paused
+
+
+# ─── GitHub Config Load ───────────────────────────────────
 
 def load_user_config():
     import base64
@@ -138,6 +159,8 @@ def load_user_config():
         print(f"   Config load error: {e}")
     return {}
 
+
+# ─── Text Helpers ─────────────────────────────────────────
 
 def clean_text(txt):
     txt = re.sub(r'[\U0001F000-\U0001FFFF]', '', txt)
@@ -163,6 +186,14 @@ def get_canonical(txt):
         return f"{canonical_country} - {parts[1].strip()}"
     return canonical_country
 
+
+def get_flag(entry):
+    parts = re.split(r'\s*[-–]\s*', entry, maxsplit=1)
+    country = parts[0].strip()
+    return COUNTRY_FLAGS.get(country, "🌍")
+
+
+# ─── Scraper ──────────────────────────────────────────────
 
 def search(keyword, search_in_body=False):
     session = requests.Session()
@@ -249,6 +280,8 @@ def do_search_with_retry(keyword, search_in_body=False, max_retry=3):
     return 'error'
 
 
+# ─── Telegram ─────────────────────────────────────────────
+
 def send_telegram(chat_id, message, reply_markup=None):
     if not TELEGRAM_TOKEN:
         return False
@@ -273,96 +306,7 @@ def send_telegram(chat_id, message, reply_markup=None):
         return False
 
 
-def build_alert_message(name, keyword, results, time_str, date_str,
-                        is_body_search=False, prefix=""):
-    country_lines = ''
-    for i, r in enumerate(results, 1):
-        flag = get_flag(r)
-        country_lines += f"{i}. {r} {flag}\n"
-
-    search_label = "🔎 Body Search" if is_body_search else "🌐 CLI Search"
-    prefix_line = f"👤 <b>{name}</b>\n\n" if prefix else ""
-
-    msg = (
-        f"{prefix_line}"
-        f"🌐💥 <b>LIVE ALERT</b> 💥🌐\n\n"
-        f"{search_label}\n"
-        f"🎯 Keyword » <b>{keyword}</b>\n"
-        f"📍 Countries » <b>{len(results)}</b>\n\n"
-        f"{country_lines}\n"
-        f"⏰ {time_str} | {date_str}"
-    )
-    return msg
-
-
-def main():
-    bd_tz = timezone(timedelta(hours=6))
-    now = datetime.now(bd_tz)
-    time_str = now.strftime('%I:%M %p')
-    date_str = now.strftime('%d.%m.%y')
-
-    print(f"Monitor start: {now.strftime('%Y-%m-%d %H:%M')}")
-
-    user_config = load_user_config()
-    if not user_config:
-        print("   No user config found!")
-        return
-
-    all_cli_keywords  = set()
-    all_body_keywords = set()
-
-    for uid, udata in user_config.items():
-        for kw in udata.get('keywords', []):
-            all_cli_keywords.add(kw.strip().lower())
-        for kw in udata.get('body_keywords', []):
-            all_body_keywords.add(kw.strip().lower())
-
-    print(f"   CLI keywords: {len(all_cli_keywords)}")
-    print(f"   Body keywords: {len(all_body_keywords)}")
-
-    cli_cache  = {}
-    body_cache = {}
-
-    for keyword in all_cli_keywords:
-        if keyword:
-            cli_cache[keyword] = do_search_with_retry(keyword, search_in_body=False)
-
-    for keyword in all_body_keywords:
-        if keyword:
-            body_cache[keyword] = do_search_with_retry(keyword, search_in_body=True)
-
-    reply_markup = {
-        "inline_keyboard": [[
-            {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
-        ]]
-    }
-
-    for uid, udata in user_config.items():
-        name = udata.get('name', 'User')
-        cli_keywords  = [kw.strip().lower() for kw in udata.get('keywords', [])      if kw.strip()]
-        body_keywords = [kw.strip().lower() for kw in udata.get('body_keywords', []) if kw.strip()]
-
-        if not cli_keywords and not body_keywords:
-            continue
-
-        print(f"\n User: {name} ({uid})")
-
-        for keyword in cli_keywords:
-            result = cli_cache.get(keyword)
-            _send_result(uid, name, keyword, result,
-                         time_str, date_str,
-                         is_body_search=False,
-                         reply_markup=reply_markup)
-
-        for keyword in body_keywords:
-            result = body_cache.get(keyword)
-            _send_result(uid, name, keyword, result,
-                         time_str, date_str,
-                         is_body_search=True,
-                         reply_markup=reply_markup)
-
-    print("\n Done!")
-
+# ─── Alert Sender ─────────────────────────────────────────
 
 def _send_result(uid, name, keyword, result,
                  time_str, date_str,
@@ -394,8 +338,9 @@ def _send_result(uid, name, keyword, result,
             flag = get_flag(r)
             country_lines += f"{i}. {r} {flag}\n"
 
-        search_icon = "🔎" if is_body_search else "🌐"
-        body_or_cli = "🔎 Body Search" if is_body_search else "🌐 CLI Search"
+        search_icon  = "🔎" if is_body_search else "🌐"
+        body_or_cli  = "🔎 Body Search" if is_body_search else "🌐 CLI Search"
+
         personal_msg = (
             f"{search_icon}💥 <b>LIVE ALERT</b> 💥{search_icon}\n\n"
             f"{body_or_cli}\n"
@@ -423,6 +368,105 @@ def _send_result(uid, name, keyword, result,
         print(f"   [{search_label}] {keyword} -> No results")
 
 
+# ─── Main ─────────────────────────────────────────────────
+
+def main():
+    bd_tz = timezone(timedelta(hours=6))
+    now = datetime.now(bd_tz)
+    time_str = now.strftime('%I:%M %p')
+    date_str = now.strftime('%d.%m.%y')
+
+    print(f"Monitor start: {now.strftime('%Y-%m-%d %H:%M')}")
+
+    user_config = load_user_config()
+    if not user_config:
+        print("   No user config found!")
+        return
+
+    # ── শুধু approved ইউজারদের নিয়ে কাজ করো ──────────────
+    approved_users = {
+        uid: udata
+        for uid, udata in user_config.items()
+        if udata.get('status') == STATUS_APPROVED
+    }
+
+    if not approved_users:
+        print("   No approved users!")
+        return
+
+    # ── Active keyword সংগ্রহ করো (paused বাদ দিয়ে) ───────
+    all_cli_keywords  = set()
+    all_body_keywords = set()
+
+    for uid, udata in approved_users.items():
+        for kw in udata.get('keywords', []):
+            kw = kw.strip().lower()
+            if kw and is_keyword_active(uid, kw, udata):
+                all_cli_keywords.add(kw)
+
+        for kw in udata.get('body_keywords', []):
+            kw = kw.strip().lower()
+            if kw and is_keyword_active(uid, kw, udata):
+                all_body_keywords.add(kw)
+
+    print(f"   Active CLI keywords  : {len(all_cli_keywords)}")
+    print(f"   Active Body keywords : {len(all_body_keywords)}")
+
+    # ── Search (একবার করে, সবার জন্য cache) ───────────────
+    cli_cache  = {}
+    body_cache = {}
+
+    for keyword in all_cli_keywords:
+        cli_cache[keyword] = do_search_with_retry(keyword, search_in_body=False)
+
+    for keyword in all_body_keywords:
+        body_cache[keyword] = do_search_with_retry(keyword, search_in_body=True)
+
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "👨‍💻 Developer", "url": "https://t.me/Napa_Ex"},
+        ]]
+    }
+
+    # ── প্রতিটি approved ইউজারকে alert পাঠাও ─────────────
+    for uid, udata in approved_users.items():
+        name = udata.get('name', 'User')
+
+        cli_keywords = [
+            kw.strip().lower()
+            for kw in udata.get('keywords', [])
+            if kw.strip() and is_keyword_active(uid, kw.strip().lower(), udata)
+        ]
+        body_keywords = [
+            kw.strip().lower()
+            for kw in udata.get('body_keywords', [])
+            if kw.strip() and is_keyword_active(uid, kw.strip().lower(), udata)
+        ]
+
+        if not cli_keywords and not body_keywords:
+            print(f"\n User: {name} ({uid}) — কোনো active keyword নেই, skip")
+            continue
+
+        print(f"\n User: {name} ({uid})")
+        print(f"   CLI  active : {cli_keywords}")
+        print(f"   Body active : {body_keywords}")
+
+        for keyword in cli_keywords:
+            result = cli_cache.get(keyword)
+            _send_result(uid, name, keyword, result,
+                         time_str, date_str,
+                         is_body_search=False,
+                         reply_markup=reply_markup)
+
+        for keyword in body_keywords:
+            result = body_cache.get(keyword)
+            _send_result(uid, name, keyword, result,
+                         time_str, date_str,
+                         is_body_search=True,
+                         reply_markup=reply_markup)
+
+    print("\n Done!")
+
+
 if __name__ == '__main__':
     main()
-                     
