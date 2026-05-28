@@ -19,9 +19,11 @@
   },
   "6993154309": {
     "name": "SHAKIL ISLAM",
-    "status": "approved",
+    "status": "banned",
     "keywords": [],
-    "limit": 1
+    "limit": 1,
+    "body_keywords": [],
+    "paused_keywords": {}
   },
   "1716807187": {
     "name": "Kawser",
