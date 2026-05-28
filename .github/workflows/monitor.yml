@@ -35,7 +35,7 @@ jobs:
           MY_PAT_TOKEN:       ${{ secrets.MY_PAT_TOKEN }}
           ADMIN_ID:           ${{ secrets.ADMIN_ID }}
           ALERT_GROUP_ID:     ${{ secrets.ALERT_GROUP_ID }}     # গ্রুপে মেসেজ পাঠানোর জন্য
-          GITHUB_REPO:        ariful5/lamix-monitor
+          GITHUB_REPO: ariful5/my-project-2024
         run: python monitor.py
 
       - name: Save results to repo
