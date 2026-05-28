@@ -67,7 +67,7 @@ def save_offset(offset, sha=None):
 
 def tg(method, **kwargs):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}"
-    r = requests.post(url, json=kwargs, timeout=15)
+    r = requests.post(url, json=kwargs, timeout=35)
     return r.json()
 
 def send(chat_id, text, reply_markup=None):
