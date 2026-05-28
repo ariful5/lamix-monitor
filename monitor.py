@@ -9,7 +9,7 @@ import time
 # ─── Config ───────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 GITHUB_TOKEN   = os.environ.get('MY_PAT_TOKEN', '')
-GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/lamix-monitor')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'ariful5/my-project-2024')
 CONFIG_FILE    = 'users_config.json'
 ALERT_GROUP_ID = os.environ.get('ALERT_GROUP_ID', '')
 
