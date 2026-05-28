@@ -23,7 +23,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
       - name: Run bot
         env:
@@ -32,4 +32,3 @@ jobs:
           ADMIN_ID:       ${{ secrets.ADMIN_ID }}
           GITHUB_REPO:    ariful5/lamix-monitor
         run: python bot.py
-        
