@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 GITHUB_TOKEN   = os.environ.get('MY_PAT_TOKEN', '')
-GITHUB_REPO    = os.environ.get('GITHUB_REPO', 'ariful5/lamix-monitor')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'ariful5/my-project-2024')
 ADMIN_ID       = os.environ.get('ADMIN_ID', '')
 CONFIG_FILE    = 'users_config.json'
 OFFSET_FILE    = 'last_update_id.txt'
