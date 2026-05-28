@@ -12,7 +12,9 @@
       "facebook"
     ],
     "limit": 999,
-    "paused_keywords": {}
+    "paused_keywords": {
+      "facebook": "2026-05-28T01:47:29.260217"
+    }
   },
   "5170624540": {
     "name": "Asif",
